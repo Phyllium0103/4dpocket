@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Phyllium的四次元口袋</title>
+
+  <!-- PWA 配置 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Phyllium的四次元口袋">
+  <meta name="theme-color" content="#2563eb">
+
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%233b82f6'/%3E%3Cstop offset='100%25' stop-color='%231d4ed8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='115' fill='url(%23g)'/%3E%3Cpath d='M130 140h170a40 40 0 0 1 40 40v200a30 30 0 0 0-30-30H130z' fill='%23ffffff' opacity='0.95'/%3E%3Cpath d='M382 140H212a40 40 0 0 0-40 40v200a30 30 0 0 1 30-30h180z' fill='%23ffffff' opacity='0.8'/%3E%3Ccircle cx='360' cy='360' r='90' fill='%23f59e0b'/%3E%3Cpath d='M360 305v55l38 22' stroke='%23ffffff' stroke-width='14' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%233b82f6'/%3E%3Cstop offset='100%25' stop-color='%231d4ed8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='512' height='512' rx='115' fill='url(%23g)'/%3E%3Cpath d='M130 140h170a40 40 0 0 1 40 40v200a30 30 0 0 0-30-30H130z' fill='%23ffffff' opacity='0.95'/%3E%3Cpath d='M382 140H212a40 40 0 0 0-40 40v200a30 30 0 0 1 30-30h180z' fill='%23ffffff' opacity='0.8'/%3E%3Ccircle cx='360' cy='360' r='90' fill='%23f59e0b'/%3E%3Cpath d='M360 305v55l38 22' stroke='%23ffffff' stroke-width='14' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E">
+  <link rel="manifest" href="data:application/manifest+json;utf-8,%7B%22name%22%3A%22Phyllium%E7%9A%84%E5%9B%95%E6%AC%A1%E5%85%83%E5%8F%A3%E8%A2%8b%22%2C%22short_name%22%3A%22Phyllium%E7%9A%84%E5%9B%95%E6%AC%A1%E5%85%83%E5%8F%A3%E8%A2%8b%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f8fafc%22%2C%22theme_color%22%3A%22%232563eb%22%7D">
+
+  <!-- 引入拆分後的樣式 -->
+  <link rel="stylesheet" href="themes.css">
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Supabase 官方 SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <header>
+    <h1>Phyllium的四次元口袋</h1>
+    <div class="header-actions">
+      <select id="theme-style-select" class="theme-select" onchange="onThemeStyleSelect(this.value)"></select>
+      <button class="theme-toggle-btn" onclick="toggleThemeMode()" id="theme-toggle-btn">深色</button>
+    </div>
+  </header>
+
+  <!-- 雲端同步狀態列 -->
+  <div class="sync-bar">
+    <div class="sync-status">
+      <span class="status-dot" id="sync-dot"></span>
+      <span id="sync-user-text">載入同步狀態中...</span>
+    </div>
+    <button class="btn btn-secondary" style="padding:2px 8px; font-size:0.72rem;" id="btn-auth-action" onclick="openAuthModal()">
+      登入 / 註冊
+    </button>
+  </div>
+
+  <!-- 1. 課表檢視頁面 -->
+  <main id="schedule-view">
+    <div class="week-nav-bar">
+      <div class="week-nav-btns">
+        <button class="btn btn-secondary" style="padding:3px 7px;" onclick="changeWeek(-1)">◀</button>
+        <button class="btn btn-secondary" style="padding:3px 7px;" onclick="resetCurrentWeek()">本週</button>
+        <button class="btn btn-secondary" style="padding:3px 7px;" onclick="changeWeek(1)">▶</button>
+      </div>
+      <div class="week-display" id="week-range-text">載入中...</div>
+      <div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-show-tutor" onchange="toggleTutorView()">
+          週末/課後
+        </label>
+      </div>
+    </div>
+
+    <!-- 課表表格 -->
+    <div class="timetable-container" id="timetable-touch-area">
+      <table id="schedule-table">
+        <thead id="schedule-head"></thead>
+        <tbody id="schedule-body"></tbody>
+      </table>
+    </div>
+
+    <!-- 頁面底部課表名稱與日期範圍橫幅 -->
+    <div class="schedule-footer-banner" id="schedule-footer-banner" onclick="openScheduleSelectModal()" title="點擊切換或新增課表">
+      載入中...
+    </div>
+
+    <!-- 控制按鈕列 -->
+    <div class="control-bar">
+      <button class="btn btn-secondary" id="btn-edit-mode-toggle" onclick="toggleEditMode()">唯讀模式</button>
+      <button class="btn btn-secondary" onclick="openScheduleConfigModal()">當前課表設定</button>
+      <button class="btn btn-secondary" onclick="openPeriodConfigModal()">節次設定</button>
+      <button class="btn btn-secondary" onclick="toggleLatePeriods()">
+        <span id="late-period-text">顯示 9-10 節</span>
+      </button>
+      <button class="btn btn-warning" onclick="openOverrideModal()">臨時調課</button>
+      <button class="btn btn-warning" onclick="openTempEventModal()">+ 臨時事件</button>
+      <button class="btn" onclick="openTutoringModal()">+ 家教</button>
+
+      <!-- 對齊選項移至右半邊 -->
+      <div style="margin-left:auto; display:inline-flex; align-items:center; gap:4px;">
+        <span style="font-size:0.75rem; font-weight:600;">對齊：</span>
+        <select id="text-align-select" class="theme-select" onchange="onTextAlignChange(this.value)">
+          <option value="center">置中對齊</option>
+          <option value="left">靠左對齊</option>
+          <option value="right">靠右對齊</option>
+        </select>
+      </div>
+      <button class="btn btn-danger" style="font-size:0.70rem;" onclick="clearAllCustomColors()">清除所有自訂顏色</button>
+    </div>
+  </main>
+
+  <!-- 2. 家教帳務頁面 -->
+  <section id="billing-view" class="billing-panel">
+    <div class="month-filter-bar">
+      <span style="font-weight:700; font-size:0.80rem;">月份：</span>
+      <input type="month" id="bill-month-filter" onchange="renderBillings()">
+      <button class="btn btn-secondary" style="padding:2px 5px; font-size:0.72rem;" onclick="setBillingMonthCurrent()">本月</button>
+      <button class="btn btn-secondary" style="padding:2px 5px; font-size:0.72rem;" onclick="setBillingMonthAll()">全期間</button>
+      <span style="font-weight:700; font-size:0.80rem; margin-left:4px;">排序：</span>
+      <select id="bill-sort-order" onchange="renderBillings()">
+        <option value="desc">由近到遠 (新→舊)</option>
+        <option value="asc">由遠到近 (舊→新)</option>
+      </select>
+      <span style="font-size:0.72rem; color:var(--text-muted); margin-left:auto;" id="month-status-desc">目前統計：本月</span>
+    </div>
+
+    <div class="student-filter-chips" id="student-filter-chips"></div>
+
+    <div class="stats-cards">
+      <div class="stat-box">
+        <div class="stat-title">總時數</div>
+        <div class="stat-val" id="stat-total-hours">0 小時</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-title">預計總收入</div>
+        <div class="stat-val" id="stat-total-income">$0</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-title">未繳清金額</div>
+        <div class="stat-val" style="color:#ef4444;" id="stat-unpaid">$0</div>
+      </div>
+    </div>
+
+    <div class="student-stats-section">
+      <h3 style="font-size:0.82rem; margin-bottom:4px;" id="student-section-title">學生帳務統計</h3>
+      <div class="student-stats-grid" id="student-stats-container"></div>
+    </div>
+
+    <div class="control-bar" style="margin-top:6px;">
+      <button class="btn" onclick="openBillingModal()">+ 新增記錄</button>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table class="billing-table">
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>學生</th>
+            <th>時數</th>
+            <th>時薪</th>
+            <th>應收</th>
+            <th>狀態</th>
+            <th>備註</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="billing-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 3. 個人記帳頁面 -->
+  <section id="finance-view" class="personal-finance-panel">
+    <div class="month-filter-bar">
+      <span style="font-weight:700; font-size:0.80rem;">月份：</span>
+      <input type="month" id="fin-month-filter" onchange="renderFinances()">
+      <button class="btn btn-secondary" style="padding:2px 5px; font-size:0.72rem;" onclick="setFinanceMonthCurrent()">本月</button>
+      <button class="btn btn-secondary" style="padding:2px 5px; font-size:0.72rem;" onclick="setFinanceMonthAll()">全期間</button>
+      <span style="font-weight:700; font-size:0.80rem; margin-left:4px;">排序：</span>
+      <select id="fin-sort-order" onchange="renderFinances()">
+        <option value="desc">由近到遠 (新→舊)</option>
+        <option value="asc">由遠到近 (舊→新)</option>
+      </select>
+      <button class="btn btn-secondary" style="padding:2px 6px; font-size:0.72rem; margin-left:auto;" id="btn-toggle-hidden" onclick="toggleShowHiddenItems()">👁️ 顯示隱藏</button>
+      <button class="btn btn-secondary" style="padding:2px 6px; font-size:0.72rem;" onclick="openCategoryManageModal()">⚙️ 類別管理</button>
+    </div>
+
+    <div class="stats-cards">
+      <div class="stat-box" onclick="setFinanceAllMode('all_expense')">
+        <div class="stat-title">總支出</div>
+        <div class="stat-val" style="color:#ef4444;" id="fin-stat-expense">$0</div>
+      </div>
+      <div class="stat-box" onclick="setFinanceAllMode('all_income')">
+        <div class="stat-title">總收入</div>
+        <div class="stat-val" style="color:#10b981;" id="fin-stat-income">$0</div>
+      </div>
+      <div class="stat-box" onclick="setFinanceAllMode('all')">
+        <div class="stat-title">淨結餘</div>
+        <div class="stat-val" id="fin-stat-balance">$0</div>
+      </div>
+      <div class="stat-box" onclick="setFinanceAllMode('all_receivable')">
+        <div class="stat-title">總應收</div>
+        <div class="stat-val" style="color:#ca8a04;" id="fin-stat-receivable">$0</div>
+      </div>
+      <div class="stat-box" onclick="setFinanceAllMode('all_payable')">
+        <div class="stat-title">總應付</div>
+        <div class="stat-val" style="color:#c2410c;" id="fin-stat-payable">$0</div>
+      </div>
+    </div>
+
+    <div class="finance-filter-chips" id="finance-filter-chips"></div>
+
+    <div class="control-bar" style="margin-top:6px;">
+      <button class="btn" onclick="openFinanceModal()">+ 記一筆</button>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table class="finance-table">
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>類型</th>
+            <th>主類別 / 子類別</th>
+            <th>金額</th>
+            <th>備註</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="finance-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 底部導覽列 -->
+  <nav class="mobile-tab-bar">
+    <div class="mobile-tab-item active" id="tab-btn-schedule" onclick="switchView('schedule')">
+      <div class="mobile-tab-icon">📖</div>
+      <div>課表檢視</div>
+    </div>
+    <div class="mobile-tab-item" id="tab-btn-billing" onclick="switchView('billing')">
+      <div class="mobile-tab-icon">💰</div>
+      <div>家教帳務</div>
+    </div>
+    <div class="mobile-tab-item" id="tab-btn-finance" onclick="switchView('finance')">
+      <div class="mobile-tab-icon">💳</div>
+      <div>個人記帳</div>
+    </div>
+  </nav>
+
+  <!-- 雲端登入/註冊彈窗 -->
+  <div class="modal" id="auth-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="auth-modal-title">雲端帳號同步</div>
+      <div class="form-group">
+        <label>電子郵件 (帳號) *</label>
+        <input type="email" id="auth-email">
+      </div>
+      <div class="form-group">
+        <label>密碼 *</label>
+        <input type="password" id="auth-password">
+      </div>
+      <div id="auth-msg" style="font-size:0.75rem; color:#ef4444; margin-top:4px;"></div>
+      <div class="modal-actions" style="margin-top:14px;">
+        <button class="btn btn-secondary" onclick="closeModal('auth-modal')">取消</button>
+        <button class="btn btn-warning" onclick="handleAuthRegister()">註冊新帳號</button>
+        <button class="btn" onclick="handleAuthLogin()">登入並同步</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 課表選擇與管理彈窗 -->
+  <div class="modal" id="schedule-select-modal">
+    <div class="modal-content">
+      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>📅 選擇與管理課表</span>
+        <button class="btn" style="padding:2px 6px; font-size:0.68rem;" onclick="openCreateScheduleModal()">+ 新增課表</button>
+      </div>
+      <div id="schedule-select-list" style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px; margin-bottom: 10px;"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('schedule-select-modal')">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增課表彈窗 -->
+  <div class="modal" id="create-schedule-modal">
+    <div class="modal-content">
+      <div class="modal-header">新增課表</div>
+      <div class="form-group">
+        <label>課表名稱 *</label>
+        <input type="text" id="new-sch-title">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>開始日期 *</label>
+          <input type="date" id="new-sch-start">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>結束日期 *</label>
+          <input type="date" id="new-sch-end">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('create-schedule-modal')">取消</button>
+        <button class="btn" onclick="confirmCreateSchedule()">確認建立</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 課表設定彈窗 -->
+  <div class="modal" id="schedule-config-modal">
+    <div class="modal-content">
+      <div class="modal-header">當前課表名稱與日期設定</div>
+      <div class="form-group">
+        <label>課表名稱 *</label>
+        <input type="text" id="sch-conf-title">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>開始日期 *</label>
+          <input type="date" id="sch-conf-start">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>結束日期 *</label>
+          <input type="date" id="sch-conf-end">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('schedule-config-modal')">取消</button>
+        <button class="btn" onclick="saveScheduleConfig()">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 學校課堂彈窗 -->
+  <div class="modal" id="school-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="school-modal-title">學校課程設定</div>
+      <div class="form-group">
+        <label>快速選擇歷史課程</label>
+        <select id="sch-preset-select" onchange="onSelectPresetCourse(this.value)">
+          <option value="">-- 選擇已存在的課程自動帶入 --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>課程名稱 *</label>
+        <input type="text" id="sch-name">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>課程屬性 *</label>
+          <select id="sch-type-select" onchange="onSchTypeChange(this.value)">
+            <option value="必修">必修</option>
+            <option value="選修">選修</option>
+            <option value="通識">通識</option>
+            <option value="custom">自訂填寫...</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1; display:none;" id="sch-type-custom-wrap">
+          <label>自訂屬性名稱</label>
+          <input type="text" id="sch-type-custom">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>教室地點</label>
+        <input type="text" id="sch-room">
+      </div>
+      <div class="form-group">
+        <label>授課教師</label>
+        <input type="text" id="sch-teacher">
+      </div>
+      <div class="form-group">
+        <label>課程底色</label>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <input type="color" id="sch-color" value="#e0f2fe" style="width:40px; height:32px; padding:0; border:none; border-radius:4px; cursor:pointer;">
+          <button type="button" class="btn btn-secondary" style="font-size:0.72rem; padding:4px 8px;" onclick="resetSchoolColor()">恢復主題最適色</button>
+        </div>
+        <div id="sch-color-desc" style="font-size:0.68rem; color:var(--text-muted); margin-top:2px;">目前使用：主題最適色</div>
+      </div>
+      <div class="form-group">
+        <label>總備忘錄 (持續存在)</label>
+        <textarea id="sch-memo" rows="2"></textarea>
+      </div>
+      <div class="form-group">
+        <label>每周備忘錄 (僅限當週更新)</label>
+        <textarea id="sch-weekly-memo" rows="2"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" onclick="deleteSchoolCourse()" style="margin-right:auto;">清空該節</button>
+        <button class="btn btn-secondary" onclick="closeModal('school-modal')">取消</button>
+        <button class="btn" onclick="saveSchoolCourse()">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 家教課堂彈窗 -->
+  <div class="modal" id="tutoring-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="tutoring-modal-title">家教課程設定</div>
+      <div class="form-group">
+        <label>快速選擇歷史家教</label>
+        <select id="tut-preset-select" onchange="onSelectPresetTutoring(this.value)">
+          <option value="">-- 選擇已存在的家教資料自動帶入 --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>學生姓名 *</label>
+        <input type="text" id="tut-student">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>星期 *</label>
+          <select id="tut-day">
+            <option value="1">週一</option><option value="2">週二</option>
+            <option value="3">週三</option><option value="4">週四</option>
+            <option value="5">週五</option><option value="6">週六</option>
+            <option value="7">週日</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:2;">
+          <label>開始時間 *</label>
+          <input type="time" id="tut-start-time" value="18:00">
+        </div>
+        <div class="form-group" style="flex:2;">
+          <label>結束時間 *</label>
+          <input type="time" id="tut-end-time" value="20:00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>教學科目與年級</label>
+        <input type="text" id="tut-subject">
+      </div>
+      <div class="form-group">
+        <label>上課地點 / 地址 *</label>
+        <input type="text" id="tut-location">
+      </div>
+      <div class="form-group">
+        <label>家長聯絡方式 (選填)</label>
+        <input type="text" id="tut-line" placeholder="Line ID" style="margin-bottom:4px;">
+        <input type="text" id="tut-fb" placeholder="Facebook 名稱 / 連結" style="margin-bottom:4px;">
+        <input type="text" id="tut-phone" placeholder="連絡電話 / 手機">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>收費時薪 ($/hr)</label>
+          <input type="number" id="tut-rate">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>課程底色</label>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <input type="color" id="tut-color" value="#fef3c7" style="width:40px; height:32px; padding:0; border:none; border-radius:4px; cursor:pointer;">
+            <button type="button" class="btn btn-secondary" style="font-size:0.68rem; padding:4px 6px;" onclick="resetTutoringColor()">恢復主題最適色</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>總備忘錄 / 使用教材 (持續存在)</label>
+        <textarea id="tut-memo" rows="2"></textarea>
+      </div>
+      <div class="form-group">
+        <label>每周備忘錄 (僅限當週更新)</label>
+        <textarea id="tut-weekly-memo" rows="2"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="tut-delete-btn" onclick="deleteTutoringClass()" style="margin-right:auto;">刪除</button>
+        <button class="btn btn-secondary" onclick="closeModal('tutoring-modal')">取消</button>
+        <button class="btn" onclick="saveTutoringClass()">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 唯讀詳細預覽彈窗 -->
+  <div class="modal" id="view-detail-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="view-detail-title">課程詳細資料</div>
+      <div id="view-detail-body"></div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="btn-revert-override" style="display:none; margin-right:auto;" onclick="revertCurrentOverride()">取消調課 (復原)</button>
+        <button class="btn btn-warning" id="btn-switch-to-edit" style="margin-right:auto;">進入編輯</button>
+        <button class="btn btn-secondary" onclick="closeModal('view-detail-modal')">關閉</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 節次時間設定彈窗 -->
+  <div class="modal" id="period-config-modal">
+    <div class="modal-content">
+      <div class="modal-header">設定各節次起訖時間</div>
+      <table class="period-edit-table">
+        <thead>
+          <tr>
+            <th style="width: 40px;">節次</th>
+            <th>名稱</th>
+            <th style="width: 95px;">開始</th>
+            <th style="width: 95px;">結束</th>
+          </tr>
+        </thead>
+        <tbody id="period-config-body"></tbody>
+      </table>
+      <div class="modal-actions" style="margin-top: 10px;">
+        <button class="btn btn-secondary" onclick="resetPeriodsToDefault()" style="margin-right:auto;">恢復預設</button>
+        <button class="btn btn-secondary" onclick="closeModal('period-config-modal')">取消</button>
+        <button class="btn" onclick="savePeriodConfig()">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 臨時調課管理彈窗 -->
+  <div class="modal" id="override-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="override-modal-title">臨時調課設定與管理</div>
+      <div class="form-group">
+        <label>選擇欲調動課程 (學校課程或家教) *</label>
+        <select id="ovr-source-select" onchange="populateOverrideOriginal()">
+          <option value="">-- 選擇欲調動的課程 --</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>原課程資訊 (唯讀)</label>
+        <input type="text" id="ovr-source-desc" readonly style="background:var(--table-th-bg);">
+      </div>
+      <div class="form-group">
+        <label>調至目標日期 *</label>
+        <input type="date" id="ovr-target-date">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>開始時間 *</label>
+          <input type="time" id="ovr-start-time" value="18:00">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>結束時間 *</label>
+          <input type="time" id="ovr-end-time" value="20:00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>調課備註</label>
+        <input type="text" id="ovr-memo">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="ovr-delete-btn" style="display:none; margin-right:auto;" onclick="deleteOverrideFromModal()">刪除調課</button>
+        <button class="btn btn-secondary" onclick="closeModal('override-modal')">關閉</button>
+        <button class="btn" id="ovr-save-btn" onclick="saveClassOverride()">建立調課</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 每周臨時事件彈窗 -->
+  <div class="modal" id="temp-event-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="temp-event-modal-title">新增每周臨時事件</div>
+      <div class="form-group">
+        <label>事件名稱 *</label>
+        <input type="text" id="tmp-title">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>星期 *</label>
+          <select id="tmp-day">
+            <option value="1">週一</option><option value="2">週二</option>
+            <option value="3">週三</option><option value="4">週四</option>
+            <option value="5">週五</option><option value="6">週六</option>
+            <option value="7">週日</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>時段類型 *</label>
+          <select id="tmp-slot-type" onchange="onTempSlotTypeChange(this.value)">
+            <option value="period">節次內</option>
+            <option value="noon">中午時間</option>
+            <option value="evening">其他時段/課後</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" id="tmp-period-wrap">
+        <label>指定節次 *</label>
+        <select id="tmp-period-id">
+          <option value="1">第一節</option><option value="2">第二節</option>
+          <option value="3">第三節</option><option value="4">第四節</option>
+          <option value="5">第五節</option><option value="6">第六節</option>
+          <option value="7">第七節</option><option value="8">第八節</option>
+        </select>
+      </div>
+      <div class="form-row" id="tmp-time-wrap" style="display:none;">
+        <div class="form-group" style="flex:1;">
+          <label>開始時間 *</label>
+          <input type="time" id="tmp-start-time" value="12:00">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>結束時間 *</label>
+          <input type="time" id="tmp-end-time" value="13:00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>事件地點</label>
+        <input type="text" id="tmp-location">
+      </div>
+      <div class="form-group">
+        <label>事件備忘</label>
+        <input type="text" id="tmp-memo">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="tmp-delete-btn" style="display:none; margin-right:auto;" onclick="deleteTempEventFromModal()">刪除</button>
+        <button class="btn btn-secondary" onclick="closeModal('temp-event-modal')">取消</button>
+        <button class="btn" id="tmp-save-btn" onclick="saveTempEvent()">儲存事件</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 帳務新增彈窗 -->
+  <div class="modal" id="billing-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="billing-modal-title">新增 / 編輯 帳務記錄</div>
+      <div class="form-group">
+        <label>上課 / 繳費日期 *</label>
+        <input type="date" id="bill-date" onchange="onBillingDateOrStudentChange()">
+      </div>
+      <div class="form-group">
+        <label>學生姓名 *</label>
+        <div class="form-row">
+          <select id="bill-student-select" style="flex:1;" onchange="onSelectBillingStudent()">
+            <option value="">-- 現有家教 --</option>
+          </select>
+          <input type="text" id="bill-student" style="flex:1;" oninput="onBillingDateOrStudentChange()">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>時數 (hr) *</label>
+          <input type="number" step="0.5" id="bill-hours" oninput="calcBillAmount()">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>時薪 ($/hr) *</label>
+          <input type="number" id="bill-rate" oninput="calcBillAmount()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>合計應收金額 ($)</label>
+        <input type="number" id="bill-total" readonly style="background:var(--table-th-bg); font-weight:700;">
+      </div>
+      <div class="form-group">
+        <label>繳費狀態</label>
+        <select id="bill-status">
+          <option value="unpaid">未繳費</option>
+          <option value="paid">已繳費</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>備註說明</label>
+        <input type="text" id="bill-notes">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('billing-modal')">取消</button>
+        <button class="btn" onclick="saveBillingRecord()">儲存記錄</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 個人記帳新增/編輯彈窗 -->
+  <div class="modal" id="finance-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="fin-modal-title">新增收支記錄</div>
+      <input type="hidden" id="fin-edit-id">
+      <div class="form-group">
+        <label>記錄日期 *</label>
+        <input type="date" id="fin-date">
+      </div>
+      <div class="form-group">
+        <label>記錄類型 *</label>
+        <select id="fin-type" onchange="onFinanceTypeChange()">
+          <option value="expense">支出</option>
+          <option value="income">收入</option>
+          <option value="transfer">轉帳</option>
+          <option value="receivable">應收</option>
+          <option value="payable">應付</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>主類別 *</label>
+        <select id="fin-parent-cat" onchange="onFinanceParentCatChange()"></select>
+      </div>
+      <div class="form-group">
+        <label>子類別 *</label>
+        <select id="fin-sub-cat"></select>
+      </div>
+      <div class="form-group">
+        <label>金額 ($) *</label>
+        <input type="number" id="fin-amount" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>商家 / 品項 / 備註</label>
+        <input type="text" id="fin-notes">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('finance-modal')">取消</button>
+        <button class="btn" onclick="saveFinanceRecord()">儲存記錄</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 單筆還款彈窗 -->
+  <div class="modal" id="repay-modal">
+    <div class="modal-content">
+      <div class="modal-header">還款作業</div>
+      <input type="hidden" id="repay-id">
+      <div class="form-group">
+        <label>款項資訊 (唯讀)</label>
+        <input type="text" id="repay-info" readonly style="background:var(--table-th-bg);">
+      </div>
+      <div class="form-group">
+        <label>還款日期 *</label>
+        <input type="date" id="repay-date">
+      </div>
+      <div class="form-group">
+        <label>本次還款金額 ($) *</label>
+        <input type="number" id="repay-amount" placeholder="0">
+      </div>
+      <div class="form-group">
+        <label>還款備註</label>
+        <input type="text" id="repay-notes">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('repay-modal')">取消</button>
+        <button class="btn" onclick="confirmRepay()">確認還款</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 類別設定與管理中心 -->
+  <div class="modal" id="category-manage-modal">
+    <div class="modal-content">
+      <div class="modal-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>⚙️ 收支類別設定</span>
+        <button class="btn btn-warning" style="padding:2px 6px; font-size:0.68rem;" onclick="resetCategoriesToDefault()">恢復預設類別</button>
+      </div>
+      <div class="form-group">
+        <label>管理類型</label>
+        <select id="cat-manage-type" onchange="renderCategoryManageList()">
+          <option value="expense">支出類別</option>
+          <option value="income">收入類別</option>
+          <option value="receivable">應收類別</option>
+          <option value="payable">應付類別</option>
+        </select>
+      </div>
+
+      <div style="display:flex; gap:6px; margin-bottom:10px;">
+        <button class="btn" style="flex:1; font-size:0.72rem;" onclick="openAddMainCategoryModal()">+ 新增主類別</button>
+        <button class="btn btn-warning" style="flex:1; font-size:0.72rem;" onclick="openAddSubCategoryModal()">+ 新增子類別</button>
+      </div>
+
+      <div id="cat-manage-list" style="max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; padding: 4px;"></div>
+
+      <div class="modal-actions" style="margin-top: 12px;">
+        <button class="btn" onclick="closeModal('category-manage-modal')">完成並儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增主類別彈窗 -->
+  <div class="modal" id="cat-add-main-modal">
+    <div class="modal-content">
+      <div class="modal-header">新增主類別</div>
+      <div class="form-group">
+        <label>選擇圖示 *</label>
+        <select id="cat-add-main-icon">
+          <option value="💡">💡 (照明/點子)</option>
+          <option value="🎁">🎁 (禮物/紅包)</option>
+          <option value="🐾">🐾 (寵物)</option>
+          <option value="☕">☕ (咖啡/下午茶)</option>
+          <option value="🛫">🛫 (旅遊)</option>
+          <option value="💻">💻 (3C/設備)</option>
+          <option value="⭐">⭐ (星號)</option>
+          <option value="🏷️">🏷️ (標籤)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>主類別名稱 *</label>
+        <input type="text" id="cat-add-main-name">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('cat-add-main-modal')">取消</button>
+        <button class="btn" onclick="confirmAddMainCategory()">確認新增</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增子類別彈窗 -->
+  <div class="modal" id="cat-add-sub-modal">
+    <div class="modal-content">
+      <div class="modal-header">新增子類別</div>
+      <div class="form-group">
+        <label>選擇所屬主類別 *</label>
+        <select id="cat-add-sub-parent"></select>
+      </div>
+      <div class="form-group">
+        <label>子類別名稱 *</label>
+        <input type="text" id="cat-add-sub-name">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('cat-add-sub-modal')">取消</button>
+        <button class="btn" onclick="confirmAddSubCategory()">確認新增</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 點選式搬移彈窗 -->
+  <div class="modal" id="cat-move-modal">
+    <div class="modal-content">
+      <div class="modal-header">選擇目標主類別 (搬移)</div>
+      <div class="form-group">
+        <label>請點選要搬移到的主類別：</label>
+        <select id="cat-move-select"></select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('cat-move-modal')">取消</button>
+        <button class="btn" onclick="confirmCatMove()">確認搬移</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 點選式合併彈窗 -->
+  <div class="modal" id="cat-merge-modal">
+    <div class="modal-content">
+      <div class="modal-header">選擇目標子類別 (合併)</div>
+      <div class="form-group">
+        <label>請點選要合併進哪一個現有子類別：</label>
+        <select id="cat-merge-select"></select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('cat-merge-modal')">取消</button>
+        <button class="btn" onclick="confirmCatMerge()">確認合併</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引入拆分後的業務邏輯 -->
+  <script src="app.js"></script>
+</body>
+</html>
