@@ -260,13 +260,13 @@ function getDefaultTutoringBgHex() {
   return rgbToHex(rgb) || "#fef3c7";
 }
 
+// 工作完全跟隨家教顏色
 function getDefaultWorkBgHex() {
-  const rgb = getComputedThemeColor("--work-def-bg");
-  return rgbToHex(rgb) || "#ccfbf1";
+  return getDefaultTutoringBgHex();
 }
 
 function rgbToHex(rgbStr) {
-  if (rgbStr.startsWith("#")) return rgbStr;
+  if (!rgbStr || rgbStr.startsWith("#")) return rgbStr;
   const match = rgbStr.match(/\d+/g);
   if (!match || match.length < 3) return null;
   return (
@@ -703,11 +703,11 @@ function init() {
               endDate: parsed.scheduleEndDate || "2027-01-10",
               periods: parsed.periods || JSON.parse(JSON.stringify(initialDefaultPeriods)),
               courses: parsed.courses || {},
-              tutorings: parsed.tutorings || [],
-              works: parsed.works || [],
-              overrides: parsed.overrides || [],
-              temporaryEvents: parsed.temporaryEvents || [],
-              weeklyMemos: parsed.weeklyMemos || {}
+              tutorings: [],
+              works: [],
+              overrides: [],
+              temporaryEvents: [],
+              weeklyMemos: {}
             }
           ];
           state.activeScheduleId = dId;
@@ -1113,7 +1113,7 @@ function openViewDetailModal(type, payload) {
   } else if (type === "work") {
     const { work } = payload;
     titleEl.innerText = `工作: ${work.name}`;
-    const typeLabel = work.type === "weekly" ? "每週工作 (僅限當週)" : "固定工作 (每週常規)";
+    const typeLabel = work.type === "weekly" ? "每週工作 (僅限當週有效)" : "固定工作 (每週常規)";
 
     bodyEl.innerHTML = `
       <div class="detail-card">
@@ -1466,7 +1466,7 @@ function renderSchedule() {
             overlayContainer.appendChild(floatCard);
           });
 
-          // 2. 白天工作
+          // 2. 白天工作 (樣式、顏色與排版完全等同家教)
           const dayWorks = currentWeekWorks.filter(
             (w) => Number(w.day) === d && !overriddenSourceIds.has(w.id) && isDaytimeSlot(w.startTime, w.endTime)
           );
@@ -1481,7 +1481,7 @@ function renderSchedule() {
             floatCard.className = `tutoring-float-card is-work ${alignClass}`;
             const bgStyle = w.color
               ? `background-color: ${w.color}; color: ${getTextColorForBg(w.color)};`
-              : `background-color: var(--work-def-bg); color: var(--work-def-text);`;
+              : `background-color: var(--tutoring-def-bg); color: var(--tutoring-def-text);`;
 
             floatCard.style = `${bgStyle} top: ${topPx + 2}px; height: ${heightPx - 4}px;`;
             floatCard.onclick = (e) => {
@@ -1489,9 +1489,9 @@ function renderSchedule() {
               handleWorkClick(w.id);
             };
             floatCard.innerHTML = `
-              <div class="item-title">💼 ${escapeHtml(w.name)}</div>
-              <div class="item-sub">${escapeHtml(w.location || w.startTime + "~" + w.endTime)}</div>
-              <div class="item-sub">${escapeHtml(w.startTime)}~${escapeHtml(w.endTime)}</div>
+              <div class="item-title">${escapeHtml(w.name)}</div>
+              <div class="item-sub">${escapeHtml(w.startTime)}</div>
+              <div class="item-sub">${escapeHtml(w.endTime)}</div>
             `;
             overlayContainer.appendChild(floatCard);
           });
@@ -1665,14 +1665,14 @@ function renderSchedule() {
           eveningCell.appendChild(card);
         });
 
-        // 工作卡片
+        // 工作卡片 (樣式、顏色與排版完全等同家教)
         dayWorks.forEach((w) => {
           hasContent = true;
           const card = document.createElement("div");
           card.className = `evening-card is-work ${alignClass}`;
           const bgStyle = w.color
             ? `background-color: ${w.color}; color: ${getTextColorForBg(w.color)};`
-            : `background-color: var(--work-def-bg); color: var(--work-def-text);`;
+            : `background-color: var(--tutoring-def-bg); color: var(--tutoring-def-text);`;
 
           card.style = bgStyle;
           card.onclick = (e) => {
@@ -1680,9 +1680,9 @@ function renderSchedule() {
             handleWorkClick(w.id);
           };
           card.innerHTML = `
-            <div class="item-title">💼 ${escapeHtml(w.name)}</div>
-            <div class="item-sub">${escapeHtml(w.location || w.startTime + "~" + w.endTime)}</div>
-            <div class="item-sub">${escapeHtml(w.startTime)}~${escapeHtml(w.endTime)}</div>
+            <div class="item-title">${escapeHtml(w.name)}</div>
+            <div class="item-sub">${escapeHtml(w.startTime)}</div>
+            <div class="item-sub">${escapeHtml(w.endTime)}</div>
           `;
           eveningCell.appendChild(card);
         });
