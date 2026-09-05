@@ -85,6 +85,7 @@ function createDefaultState() {
     showTutoring: false,
     textAlign: "center",
     billings: [],
+    workBillings: [],
     finances: [],
     customCategories: null,
     showHiddenItems: false,
@@ -98,6 +99,7 @@ function createDefaultState() {
         periods: JSON.parse(JSON.stringify(initialDefaultPeriods)),
         courses: {},
         tutorings: [],
+        works: [],
         overrides: [],
         temporaryEvents: [],
         weeklyMemos: {}
@@ -109,13 +111,18 @@ function createDefaultState() {
 let state = createDefaultState();
 let currentEditingSlot = null;
 let currentEditingTutoringId = null;
+let currentEditingWorkId = null;
 let currentEditingBillingIndex = null;
+let currentEditingWorkBillingIndex = null;
 let currentViewingOverrideId = null;
 let currentViewingTempEventId = null;
 let currentEditingOverrideId = null;
 let currentEditingTempEventId = null;
 let currentWeekOffset = 0;
 let currentSelectedStudentFilter = "all";
+
+// 帳務模式：'tutoring' (家教) 或 'work' (工作)
+let currentBillingType = "tutoring";
 
 let financeActiveMode = "all";
 let financeActiveMainCat = "all";
@@ -135,6 +142,7 @@ function getActiveSchedule() {
         periods: JSON.parse(JSON.stringify(initialDefaultPeriods)),
         courses: {},
         tutorings: [],
+        works: [],
         overrides: [],
         temporaryEvents: [],
         weeklyMemos: {}
@@ -149,6 +157,7 @@ function getActiveSchedule() {
   }
   sch.courses = sch.courses || {};
   sch.tutorings = sch.tutorings || [];
+  sch.works = sch.works || [];
   sch.overrides = sch.overrides || [];
   sch.temporaryEvents = sch.temporaryEvents || [];
   sch.weeklyMemos = sch.weeklyMemos || {};
@@ -251,6 +260,11 @@ function getDefaultTutoringBgHex() {
   return rgbToHex(rgb) || "#fef3c7";
 }
 
+function getDefaultWorkBgHex() {
+  const rgb = getComputedThemeColor("--work-def-bg");
+  return rgbToHex(rgb) || "#ccfbf1";
+}
+
 function rgbToHex(rgbStr) {
   if (rgbStr.startsWith("#")) return rgbStr;
   const match = rgbStr.match(/\d+/g);
@@ -280,7 +294,7 @@ function getTextColorForBg(hexColor) {
 }
 
 function clearAllCustomColors() {
-  if (confirm("確定要清除所有課程與家教的自訂底色，全部恢復為主題最適色嗎？")) {
+  if (confirm("確定要清除所有課程、家教與工作的自訂底色，全部恢復為主題最適色嗎？")) {
     triggerHaptic(25);
     const sch = getActiveSchedule();
     if (sch.courses) {
@@ -291,6 +305,11 @@ function clearAllCustomColors() {
     if (sch.tutorings) {
       sch.tutorings.forEach((t) => {
         if (t.color) delete t.color;
+      });
+    }
+    if (sch.works) {
+      sch.works.forEach((w) => {
+        if (w.color) delete w.color;
       });
     }
     saveToStorage();
@@ -335,6 +354,23 @@ function updatePresetDropdowns() {
         opt.innerText = `${t.student} (${t.subject || "家教"})`;
         tutorSelect.appendChild(opt);
       }
+    });
+  }
+
+  const workSelect = document.getElementById("work-preset-select");
+  if (workSelect) {
+    workSelect.innerHTML = '<option value="">-- 選擇已存在的工作資料自動帶入 --</option>';
+    const uniqueWorks = {};
+    (state.schedules || []).forEach((s) => {
+      (s.works || []).forEach((w) => {
+        if (w.name && !uniqueWorks[w.name]) {
+          uniqueWorks[w.name] = w;
+          const opt = document.createElement("option");
+          opt.value = JSON.stringify(w);
+          opt.innerText = `${w.name} (${w.location || "工作"})`;
+          workSelect.appendChild(opt);
+        }
+      });
     });
   }
 }
@@ -405,6 +441,21 @@ function onSelectPresetTutoring(jsonStr) {
   } catch (e) {}
 }
 
+function onSelectPresetWork(jsonStr) {
+  if (!jsonStr) return;
+  try {
+    const w = JSON.parse(jsonStr);
+    document.getElementById("work-name").value = w.name || "";
+    if (w.day) document.getElementById("work-day").value = w.day;
+    if (w.startTime) document.getElementById("work-start-time").value = w.startTime;
+    if (w.endTime) document.getElementById("work-end-time").value = w.endTime;
+    document.getElementById("work-location").value = w.location || "";
+    if (w.rate) document.getElementById("work-rate").value = w.rate;
+    document.getElementById("work-memo").value = w.memo || "";
+    document.getElementById("work-color").value = w.color || getDefaultWorkBgHex();
+  } catch (e) {}
+}
+
 function resetSchoolColor() {
   const defHex = getDefaultSchoolBgHex();
   document.getElementById("sch-color").value = defHex;
@@ -414,6 +465,11 @@ function resetSchoolColor() {
 function resetTutoringColor() {
   const defHex = getDefaultTutoringBgHex();
   document.getElementById("tut-color").value = defHex;
+}
+
+function resetWorkColor() {
+  const defHex = getDefaultWorkBgHex();
+  document.getElementById("work-color").value = defHex;
 }
 
 // ==========================================
@@ -524,6 +580,7 @@ async function pullCloudData() {
 
     if (data && data.data) {
       state = { ...createDefaultState(), ...data.data };
+      state.workBillings = state.workBillings || [];
       localStorage.setItem("local_schedule_v2_data", JSON.stringify(state));
       applyTheme();
       updatePresetDropdowns();
@@ -635,6 +692,7 @@ function init() {
       const parsed = JSON.parse(saved);
       if (parsed && typeof parsed === "object") {
         state = { ...createDefaultState(), ...parsed };
+        state.workBillings = state.workBillings || [];
         if (!parsed.schedules || !Array.isArray(parsed.schedules) || parsed.schedules.length === 0) {
           const dId = "sch_" + Date.now();
           state.schedules = [
@@ -646,6 +704,7 @@ function init() {
               periods: parsed.periods || JSON.parse(JSON.stringify(initialDefaultPeriods)),
               courses: parsed.courses || {},
               tutorings: parsed.tutorings || [],
+              works: parsed.works || [],
               overrides: parsed.overrides || [],
               temporaryEvents: parsed.temporaryEvents || [],
               weeklyMemos: parsed.weeklyMemos || {}
@@ -849,6 +908,7 @@ function confirmCreateSchedule() {
     periods: JSON.parse(JSON.stringify(initialDefaultPeriods)),
     courses: {},
     tutorings: [],
+    works: [],
     overrides: [],
     temporaryEvents: [],
     weeklyMemos: {}
@@ -938,6 +998,19 @@ function handleTutoringClick(tId) {
     openViewDetailModal("tutoring", { tut });
   } else {
     openTutoringModal(tId);
+  }
+}
+
+function handleWorkClick(wId) {
+  triggerHaptic(15);
+  const sch = getActiveSchedule();
+  const work = (sch.works || []).find((w) => w.id === wId);
+  if (!work) return;
+
+  if (!state.isEditMode) {
+    openViewDetailModal("work", { work });
+  } else {
+    openWorkModal(wId);
   }
 }
 
@@ -1037,6 +1110,26 @@ function openViewDetailModal(type, payload) {
       closeModal("view-detail-modal");
       openTutoringModal(tut.id);
     };
+  } else if (type === "work") {
+    const { work } = payload;
+    titleEl.innerText = `工作: ${work.name}`;
+    const typeLabel = work.type === "weekly" ? "每週工作 (僅限當週)" : "固定工作 (每週常規)";
+
+    bodyEl.innerHTML = `
+      <div class="detail-card">
+        <div class="detail-label">工作類型</div>
+        <div class="detail-value" style="font-weight:700; color:var(--primary);">${typeLabel}</div>
+        <div class="detail-label">工作時間</div>
+        <div class="detail-value">${dayNames[work.day]} ${work.startTime} ~ ${work.endTime}</div>
+        ${work.location ? `<div class="detail-label">工作地點</div><div class="detail-value"><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(work.location)}" target="_blank" style="color:var(--primary); text-decoration:underline;">${escapeHtml(work.location)}</a></div>` : ""}
+        ${work.rate ? `<div class="detail-label">工作時薪</div><div class="detail-value">$${escapeHtml(work.rate)} / hr</div>` : ""}
+        ${work.memo ? `<div class="detail-label">工作備註</div><div class="detail-value">${escapeHtml(work.memo)}</div>` : ""}
+      </div>
+    `;
+    switchBtn.onclick = () => {
+      closeModal("view-detail-modal");
+      openWorkModal(work.id);
+    };
   } else if (type === "override") {
     const { ovr } = payload;
     currentViewingOverrideId = ovr.id;
@@ -1050,6 +1143,15 @@ function openViewDetailModal(type, payload) {
           <div class="detail-value">學生: ${escapeHtml(originalTut.student)}</div>
           ${originalTut.subject ? `<div class="detail-value">科目: ${escapeHtml(originalTut.subject)}</div>` : ""}
           ${originalTut.location ? `<div class="detail-value">地點: ${escapeHtml(originalTut.location)}</div>` : ""}
+        `;
+      }
+    } else if (ovr.type === "work") {
+      const originalWork = (sch.works || []).find((w) => w.id === ovr.sourceId);
+      if (originalWork) {
+        sourceDetailHtml = `
+          <div class="detail-label" style="margin-top:8px; border-top:1px dashed var(--border); padding-top:4px;">原本工作詳細資料</div>
+          <div class="detail-value">工作名稱: ${escapeHtml(originalWork.name)}</div>
+          ${originalWork.location ? `<div class="detail-value">地點: ${escapeHtml(originalWork.location)}</div>` : ""}
         `;
       }
     } else if (ovr.type === "school") {
@@ -1267,6 +1369,11 @@ function renderSchedule() {
     const currentWeekTempEvents = (sch.temporaryEvents || []).filter((t) => t.weekKey === weekKey);
     const hasNoonEvents = currentWeekTempEvents.some((t) => t.slotType === "noon");
 
+    // 工作過濾：固定工作 或 當週每週工作
+    const currentWeekWorks = (sch.works || []).filter(
+      (w) => w.type !== "weekly" || w.weekKey === weekKey
+    );
+
     periodsToRender.forEach((p, pIdx) => {
       const tr = document.createElement("tr");
       const timeTh = document.createElement("td");
@@ -1318,20 +1425,20 @@ function renderSchedule() {
 
         wrapper.appendChild(slotDiv);
 
-        // 疊加層 (家教、調課、日間臨時事件)
+        // 疊加層 (家教、工作、調課、日間臨時事件)
         if (pIdx === 0) {
           const overlayContainer = document.createElement("div");
           overlayContainer.className = "col-overlay-container";
 
           const overriddenSourceIds = new Set((sch.overrides || []).map((o) => o.sourceId));
+
+          // 1. 白天家教
           const dayTutors = (sch.tutorings || []).filter(
             (t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && isDaytimeSlot(t.startTime, t.endTime)
           );
-
           dayTutors.forEach((t) => {
             const tStart = timeToMinutes(t.startTime);
             const tEnd = timeToMinutes(t.endTime);
-
             const topPx = timeToPixelOffset(tStart, periodsToRender);
             const bottomPx = timeToPixelOffset(tEnd, periodsToRender);
             const heightPx = Math.max(bottomPx - topPx, 28);
@@ -1350,7 +1457,6 @@ function renderSchedule() {
               e.stopPropagation();
               handleTutoringClick(t.id);
             };
-            // 一般家教維持原樣：顯示姓名、開始時間、結束時間
             floatCard.innerHTML = `
               ${hasWeeklyMemo ? `<span class="memo-badge" title="有每周備忘錄">📌</span>` : ""}
               <div class="item-title">${escapeHtml(t.student)}</div>
@@ -1360,14 +1466,43 @@ function renderSchedule() {
             overlayContainer.appendChild(floatCard);
           });
 
-          // 調課事件 (改為顯示名稱與地點)
+          // 2. 白天工作
+          const dayWorks = currentWeekWorks.filter(
+            (w) => Number(w.day) === d && !overriddenSourceIds.has(w.id) && isDaytimeSlot(w.startTime, w.endTime)
+          );
+          dayWorks.forEach((w) => {
+            const wStart = timeToMinutes(w.startTime);
+            const wEnd = timeToMinutes(w.endTime);
+            const topPx = timeToPixelOffset(wStart, periodsToRender);
+            const bottomPx = timeToPixelOffset(wEnd, periodsToRender);
+            const heightPx = Math.max(bottomPx - topPx, 28);
+
+            const floatCard = document.createElement("div");
+            floatCard.className = `tutoring-float-card is-work ${alignClass}`;
+            const bgStyle = w.color
+              ? `background-color: ${w.color}; color: ${getTextColorForBg(w.color)};`
+              : `background-color: var(--work-def-bg); color: var(--work-def-text);`;
+
+            floatCard.style = `${bgStyle} top: ${topPx + 2}px; height: ${heightPx - 4}px;`;
+            floatCard.onclick = (e) => {
+              e.stopPropagation();
+              handleWorkClick(w.id);
+            };
+            floatCard.innerHTML = `
+              <div class="item-title">💼 ${escapeHtml(w.name)}</div>
+              <div class="item-sub">${escapeHtml(w.location || w.startTime + "~" + w.endTime)}</div>
+              <div class="item-sub">${escapeHtml(w.startTime)}~${escapeHtml(w.endTime)}</div>
+            `;
+            overlayContainer.appendChild(floatCard);
+          });
+
+          // 3. 調課事件
           const dayOverrides = (sch.overrides || []).filter(
             (o) => o.targetDate === currentCellDate && isDaytimeSlot(o.startTime, o.endTime)
           );
           dayOverrides.forEach((o) => {
             const oStart = timeToMinutes(o.startTime);
             const oEnd = timeToMinutes(o.endTime);
-
             const topPx = timeToPixelOffset(oStart, periodsToRender);
             const bottomPx = timeToPixelOffset(oEnd, periodsToRender);
             const heightPx = Math.max(bottomPx - topPx, 28);
@@ -1381,9 +1516,11 @@ function renderSchedule() {
             };
             const loc = o.type === "tutoring" && o.sourceId 
               ? ((sch.tutorings || []).find(t => t.id === o.sourceId)?.location || "") 
-              : (o.type === "school" && o.sourceKey 
-                ? (sch.courses?.[o.sourceKey]?.room || "") 
-                : "");
+              : (o.type === "work" && o.sourceId
+                ? ((sch.works || []).find(w => w.id === o.sourceId)?.location || "")
+                : (o.type === "school" && o.sourceKey 
+                  ? (sch.courses?.[o.sourceKey]?.room || "") 
+                  : ""));
             floatCard.innerHTML = `
               <div class="item-title">${escapeHtml(o.title)}</div>
               ${loc ? `<div class="item-sub">${escapeHtml(loc)}</div>` : ""}
@@ -1391,14 +1528,13 @@ function renderSchedule() {
             overlayContainer.appendChild(floatCard);
           });
 
-          // 日間臨時事件 (改為顯示名稱與地點)
+          // 4. 日間臨時事件
           const dayDaytimeTemps = currentWeekTempEvents.filter(
             (t) => Number(t.day) === d && isDaytimeSlot(t.startTime, t.endTime) && t.slotType !== "noon"
           );
           dayDaytimeTemps.forEach((tmp) => {
             const tmpStart = timeToMinutes(tmp.startTime);
             const tmpEnd = timeToMinutes(tmp.endTime);
-
             const topPx = timeToPixelOffset(tmpStart, periodsToRender);
             const bottomPx = timeToPixelOffset(tmpEnd, periodsToRender);
             const heightPx = Math.max(bottomPx - topPx, 28);
@@ -1491,6 +1627,9 @@ function renderSchedule() {
         const dayTutors = (sch.tutorings || []).filter(
           (t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && !isDaytimeSlot(t.startTime, t.endTime)
         );
+        const dayWorks = currentWeekWorks.filter(
+          (w) => Number(w.day) === d && !overriddenSourceIds.has(w.id) && !isDaytimeSlot(w.startTime, w.endTime)
+        );
         const dayOverrides = (sch.overrides || []).filter(
           (o) => o.targetDate === currentCellDate && !isDaytimeSlot(o.startTime, o.endTime)
         );
@@ -1500,6 +1639,7 @@ function renderSchedule() {
 
         let hasContent = false;
 
+        // 家教卡片
         dayTutors.forEach((t) => {
           hasContent = true;
           const card = document.createElement("div");
@@ -1516,12 +1656,33 @@ function renderSchedule() {
             e.stopPropagation();
             handleTutoringClick(t.id);
           };
-          // 一般家教維持原樣：顯示姓名、開始時間、結束時間
           card.innerHTML = `
             ${hasWeeklyMemo ? `<span class="memo-badge" title="有每周備忘錄">📌</span>` : ""}
             <div class="item-title">${escapeHtml(t.student)}</div>
             <div class="item-sub">${escapeHtml(t.startTime)}</div>
             <div class="item-sub">${escapeHtml(t.endTime)}</div>
+          `;
+          eveningCell.appendChild(card);
+        });
+
+        // 工作卡片
+        dayWorks.forEach((w) => {
+          hasContent = true;
+          const card = document.createElement("div");
+          card.className = `evening-card is-work ${alignClass}`;
+          const bgStyle = w.color
+            ? `background-color: ${w.color}; color: ${getTextColorForBg(w.color)};`
+            : `background-color: var(--work-def-bg); color: var(--work-def-text);`;
+
+          card.style = bgStyle;
+          card.onclick = (e) => {
+            e.stopPropagation();
+            handleWorkClick(w.id);
+          };
+          card.innerHTML = `
+            <div class="item-title">💼 ${escapeHtml(w.name)}</div>
+            <div class="item-sub">${escapeHtml(w.location || w.startTime + "~" + w.endTime)}</div>
+            <div class="item-sub">${escapeHtml(w.startTime)}~${escapeHtml(w.endTime)}</div>
           `;
           eveningCell.appendChild(card);
         });
@@ -1537,9 +1698,11 @@ function renderSchedule() {
           };
           const loc = o.type === "tutoring" && o.sourceId 
             ? ((sch.tutorings || []).find(t => t.id === o.sourceId)?.location || "") 
-            : (o.type === "school" && o.sourceKey 
-              ? (sch.courses?.[o.sourceKey]?.room || "") 
-              : "");
+            : (o.type === "work" && o.sourceId
+              ? ((sch.works || []).find(w => w.id === o.sourceId)?.location || "")
+              : (o.type === "school" && o.sourceKey 
+                ? (sch.courses?.[o.sourceKey]?.room || "") 
+                : ""));
           card.innerHTML = `
             <div class="item-title">${escapeHtml(o.title)}</div>
             ${loc ? `<div class="item-sub">${escapeHtml(loc)}</div>` : ""}
@@ -1578,7 +1741,7 @@ function renderSchedule() {
 }
 
 // ==========================================
-// 學校課程與家教 Modal 與備忘錄儲存
+// 學校課程 Modal
 // ==========================================
 function openSchoolModal(day, period) {
   currentEditingSlot = { day, period };
@@ -1676,6 +1839,9 @@ function deleteSchoolCourse() {
   }
 }
 
+// ==========================================
+// 家教 Modal
+// ==========================================
 function openTutoringModal(id = null) {
   currentEditingTutoringId = id;
   const sch = getActiveSchedule();
@@ -1798,6 +1964,109 @@ function deleteTutoringClass() {
     saveToStorage();
     renderSchedule();
     closeModal("tutoring-modal");
+  }
+}
+
+// ==========================================
+// 工作 Modal (固定工作 / 每週工作)
+// ==========================================
+function openWorkModal(id = null) {
+  currentEditingWorkId = id;
+  const sch = getActiveSchedule();
+  const delBtn = document.getElementById("work-delete-btn");
+  const modalTitle = document.getElementById("work-modal-title");
+  const defHex = getDefaultWorkBgHex();
+
+  if (id) {
+    const work = (sch.works || []).find((w) => w.id === id);
+    if (!work) return;
+    if (modalTitle) modalTitle.innerText = "編輯工作排程";
+    document.getElementById("work-type").value = work.type || "fixed";
+    document.getElementById("work-name").value = work.name || "";
+    document.getElementById("work-day").value = work.day || "1";
+    document.getElementById("work-start-time").value = work.startTime || "09:00";
+    document.getElementById("work-end-time").value = work.endTime || "12:00";
+    document.getElementById("work-location").value = work.location || "";
+    document.getElementById("work-rate").value = work.rate || "";
+    document.getElementById("work-memo").value = work.memo || "";
+    document.getElementById("work-color").value = work.color || defHex;
+    delBtn.style.display = "block";
+  } else {
+    if (modalTitle) modalTitle.innerText = "新增工作排程";
+    document.getElementById("work-type").value = "fixed";
+    document.getElementById("work-name").value = "";
+    document.getElementById("work-day").value = "1";
+    document.getElementById("work-start-time").value = "09:00";
+    document.getElementById("work-end-time").value = "12:00";
+    document.getElementById("work-location").value = "";
+    document.getElementById("work-rate").value = "";
+    document.getElementById("work-memo").value = "";
+    document.getElementById("work-color").value = defHex;
+    delBtn.style.display = "none";
+  }
+  document.getElementById("work-modal").classList.add("active");
+}
+
+function saveWorkClass() {
+  triggerHaptic(20);
+  const sch = getActiveSchedule();
+  const type = document.getElementById("work-type").value;
+  const name = document.getElementById("work-name").value.trim();
+  const day = document.getElementById("work-day").value;
+  const startTime = document.getElementById("work-start-time").value;
+  const endTime = document.getElementById("work-end-time").value;
+  const location = document.getElementById("work-location").value.trim();
+  const rate = document.getElementById("work-rate").value;
+  const memo = document.getElementById("work-memo").value.trim();
+  const color = document.getElementById("work-color").value;
+
+  if (!name || !startTime || !endTime || !location) {
+    alert("請完整填寫工作名稱、工作地點與工作時間！");
+    return;
+  }
+
+  const defHex = getDefaultWorkBgHex();
+  const savedColor = color.toLowerCase() === defHex.toLowerCase() ? undefined : color;
+  const weekKey = getWeekKey(new Date());
+
+  if (!sch.works) sch.works = [];
+  const workId = currentEditingWorkId || "work_" + Date.now();
+  const itemData = {
+    id: workId,
+    type, // 'fixed' 或 'weekly'
+    weekKey: type === "weekly" ? weekKey : undefined,
+    name,
+    day,
+    startTime,
+    endTime,
+    location,
+    rate,
+    memo,
+    color: savedColor
+  };
+
+  if (currentEditingWorkId) {
+    const idx = sch.works.findIndex((w) => w.id === currentEditingWorkId);
+    if (idx > -1) sch.works[idx] = itemData;
+  } else {
+    sch.works.push(itemData);
+  }
+
+  saveToStorage();
+  renderSchedule();
+  renderBillings();
+  closeModal("work-modal");
+}
+
+function deleteWorkClass() {
+  if (!currentEditingWorkId) return;
+  if (confirm("確定要刪除這筆工作排程嗎？")) {
+    triggerHaptic(25);
+    const sch = getActiveSchedule();
+    sch.works = (sch.works || []).filter((w) => w.id !== currentEditingWorkId);
+    saveToStorage();
+    renderSchedule();
+    closeModal("work-modal");
   }
 }
 
@@ -1930,8 +2199,34 @@ function saveTempEvent() {
 }
 
 // ==========================================
-// 家教帳務邏輯
+// 帳務管理邏輯 (家教帳務 vs 工作帳務)
 // ==========================================
+function switchBillingType(type) {
+  triggerHaptic(15);
+  currentBillingType = type;
+  currentSelectedStudentFilter = "all";
+
+  const btnTutoring = document.getElementById("btn-billing-type-tutoring");
+  const btnWork = document.getElementById("btn-billing-type-work");
+  if (btnTutoring) btnTutoring.className = `billing-type-btn ${type === "tutoring" ? "active" : ""}`;
+  if (btnWork) btnWork.className = `billing-type-btn ${type === "work" ? "active" : ""}`;
+
+  const navBillingText = document.getElementById("nav-billing-text");
+  if (navBillingText) {
+    navBillingText.innerText = type === "tutoring" ? "家教帳務" : "工作帳務";
+  }
+
+  renderBillings();
+}
+
+function openCurrentBillingModal() {
+  if (currentBillingType === "work") {
+    openWorkBillingModal();
+  } else {
+    openBillingModal();
+  }
+}
+
 function setBillingMonthCurrent() {
   const now = new Date();
   const year = now.getFullYear();
@@ -1945,9 +2240,9 @@ function setBillingMonthAll() {
   renderBillings();
 }
 
-function setStudentFilter(studentName) {
+function setStudentFilter(name) {
   triggerHaptic(15);
-  currentSelectedStudentFilter = studentName;
+  currentSelectedStudentFilter = name;
   renderBillings();
 }
 
@@ -1956,29 +2251,47 @@ function renderBillings() {
   if (!tbody) return;
   tbody.innerHTML = "";
 
+  const isWork = currentBillingType === "work";
   const selectedMonth = document.getElementById("bill-month-filter").value;
   const sortOrder = document.getElementById("bill-sort-order")?.value || "desc";
   const statusDesc = document.getElementById("month-status-desc");
-  const studentSectionTitle = document.getElementById("student-section-title");
+  const sectionTitle = document.getElementById("student-section-title");
+  const thTarget = document.getElementById("th-billing-target");
+  const unpaidTitle = document.getElementById("stat-unpaid-title");
+
+  if (thTarget) thTarget.innerText = isWork ? "工作名稱" : "學生";
+  if (unpaidTitle) unpaidTitle.innerText = isWork ? "未領取金額" : "未繳清金額";
 
   if (selectedMonth) {
     if (statusDesc) statusDesc.innerText = `目前：${selectedMonth}`;
-    if (studentSectionTitle) studentSectionTitle.innerText = `學生帳務統計 (${selectedMonth})`;
+    if (sectionTitle) sectionTitle.innerText = isWork ? `工作帳務統計 (${selectedMonth})` : `學生帳務統計 (${selectedMonth})`;
   } else {
     if (statusDesc) statusDesc.innerText = `目前：全部歷史`;
-    if (studentSectionTitle) studentSectionTitle.innerText = `學生帳務統計 (全期間)`;
+    if (sectionTitle) sectionTitle.innerText = isWork ? `工作帳務統計 (全期間)` : `學生帳務統計 (全期間)`;
   }
 
-  const allStudentsSet = new Set();
-  (state.schedules || []).forEach((sch) => {
-    (sch.tutorings || []).forEach((t) => {
-      if (t.student) allStudentsSet.add(t.student);
+  // 1. 建立分類 Chips 清單
+  const allNamesSet = new Set();
+  if (isWork) {
+    (state.schedules || []).forEach((sch) => {
+      (sch.works || []).forEach((w) => {
+        if (w.name) allNamesSet.add(w.name);
+      });
     });
-  });
-  (state.billings || []).forEach((b) => {
-    if (b.student) allStudentsSet.add(b.student);
-  });
-  const studentsList = Array.from(allStudentsSet);
+    (state.workBillings || []).forEach((b) => {
+      if (b.name) allNamesSet.add(b.name);
+    });
+  } else {
+    (state.schedules || []).forEach((sch) => {
+      (sch.tutorings || []).forEach((t) => {
+        if (t.student) allNamesSet.add(t.student);
+      });
+    });
+    (state.billings || []).forEach((b) => {
+      if (b.student) allNamesSet.add(b.student);
+    });
+  }
+  const namesList = Array.from(allNamesSet);
 
   const chipsContainer = document.getElementById("student-filter-chips");
   if (chipsContainer) {
@@ -1986,100 +2299,112 @@ function renderBillings() {
 
     const allChip = document.createElement("div");
     allChip.className = `student-chip ${currentSelectedStudentFilter === "all" ? "active" : ""}`;
-    allChip.innerText = "全部學生";
+    allChip.innerText = isWork ? "全部工作" : "全部學生";
     allChip.onclick = () => setStudentFilter("all");
     chipsContainer.appendChild(allChip);
 
-    studentsList.forEach((sName) => {
+    namesList.forEach((item) => {
       const chip = document.createElement("div");
-      chip.className = `student-chip ${currentSelectedStudentFilter === sName ? "active" : ""}`;
-      chip.innerText = sName;
-      chip.onclick = () => setStudentFilter(sName);
+      chip.className = `student-chip ${currentSelectedStudentFilter === item ? "active" : ""}`;
+      chip.innerText = item;
+      chip.onclick = () => setStudentFilter(item);
       chipsContainer.appendChild(chip);
     });
   }
 
+  // 2. 統計數據計算
   let totalHours = 0;
   let totalIncome = 0;
   let totalUnpaid = 0;
-  const studentMap = {};
+  const statMap = {};
 
-  (state.billings || []).forEach((bill) => {
-    const billMonth = (bill.date || '').slice(0, 7);
-    if (selectedMonth && billMonth !== selectedMonth) return;
+  const dataset = isWork ? (state.workBillings || []) : (state.billings || []);
 
-    const h = Number(bill.hours || 0);
-    const tot = Number(bill.total || 0);
-    const sName = bill.student || "未具名";
+  dataset.forEach((record) => {
+    const recordMonth = (record.date || '').slice(0, 7);
+    if (selectedMonth && recordMonth !== selectedMonth) return;
 
-    if (!studentMap[sName]) studentMap[sName] = { totalHours: 0, totalIncome: 0, unpaidAmount: 0, paidAmount: 0 };
-    studentMap[sName].totalHours += h;
-    studentMap[sName].totalIncome += tot;
-    if (bill.status === "unpaid") studentMap[sName].unpaidAmount += tot;
-    else studentMap[sName].paidAmount += tot;
+    const h = Number(record.hours || 0);
+    const tot = Number(record.total || 0);
+    const targetName = (isWork ? record.name : record.student) || "未具名";
 
-    if (currentSelectedStudentFilter === "all" || currentSelectedStudentFilter === sName) {
+    if (!statMap[targetName]) statMap[targetName] = { totalHours: 0, totalIncome: 0, unpaidAmount: 0, paidAmount: 0 };
+    statMap[targetName].totalHours += h;
+    statMap[targetName].totalIncome += tot;
+    if (record.status === "unpaid") statMap[targetName].unpaidAmount += tot;
+    else statMap[targetName].paidAmount += tot;
+
+    if (currentSelectedStudentFilter === "all" || currentSelectedStudentFilter === targetName) {
       totalHours += h;
       totalIncome += tot;
-      if (bill.status === "unpaid") totalUnpaid += tot;
+      if (record.status === "unpaid") totalUnpaid += tot;
     }
   });
 
-  const studentStatsContainer = document.getElementById("student-stats-container");
-  if (studentStatsContainer) {
-    studentStatsContainer.innerHTML = "";
-    const studentKeys = Object.keys(studentMap);
+  // 3. 卡片統計顯示
+  const statsContainer = document.getElementById("student-stats-container");
+  if (statsContainer) {
+    statsContainer.innerHTML = "";
+    const keys = Object.keys(statMap);
 
-    if (studentKeys.length === 0) {
-      studentStatsContainer.innerHTML = `<div style="color:var(--text-muted); font-size:0.75rem;">${
+    if (keys.length === 0) {
+      statsContainer.innerHTML = `<div style="color:var(--text-muted); font-size:0.75rem;">${
         selectedMonth ? selectedMonth + " 尚無記錄。" : "目前尚無帳務記錄。"
       }</div>`;
     } else {
-      studentKeys.forEach((sName) => {
-        const s = studentMap[sName];
+      keys.forEach((k) => {
+        const s = statMap[k];
         const card = document.createElement("div");
         card.className = "student-stat-card";
         card.innerHTML = `
-          <div class="student-stat-name">${escapeHtml(sName)}</div>
+          <div class="student-stat-name">${escapeHtml(k)}</div>
           <div class="student-stat-row"><span>時數：</span><strong>${s.totalHours} hr</strong></div>
           <div class="student-stat-row"><span>應收：</span><strong>$${s.totalIncome.toLocaleString()}</strong></div>
-          <div class="student-stat-row"><span>已收：</span><span style="color:#15803d; font-weight:700;">$${s.paidAmount.toLocaleString()}</span></div>
-          <div class="student-stat-row"><span>未繳：</span><span style="color:#ef4444; font-weight:700;">$${s.unpaidAmount.toLocaleString()}</span></div>
+          <div class="student-stat-row"><span>${isWork ? "已領：" : "已收："}</span><span style="color:#15803d; font-weight:700;">$${s.paidAmount.toLocaleString()}</span></div>
+          <div class="student-stat-row"><span>${isWork ? "未領：" : "未繳："}</span><span style="color:#ef4444; font-weight:700;">$${s.unpaidAmount.toLocaleString()}</span></div>
         `;
-        studentStatsContainer.appendChild(card);
+        statsContainer.appendChild(card);
       });
     }
   }
 
-  let filteredBillings = [];
-  (state.billings || []).forEach((bill, idx) => {
-    const billMonth = (bill.date || '').slice(0, 7);
-    if (selectedMonth && billMonth !== selectedMonth) return;
-    if (currentSelectedStudentFilter !== "all" && bill.student !== currentSelectedStudentFilter) return;
-    filteredBillings.push({ bill, idx });
+  // 4. 明細表格清單
+  let filteredRecords = [];
+  dataset.forEach((record, idx) => {
+    const recordMonth = (record.date || '').slice(0, 7);
+    if (selectedMonth && recordMonth !== selectedMonth) return;
+    const targetName = isWork ? record.name : record.student;
+    if (currentSelectedStudentFilter !== "all" && targetName !== currentSelectedStudentFilter) return;
+    filteredRecords.push({ record, idx });
   });
 
-  filteredBillings.sort((a, b) => {
-    const cmp = a.bill.date.localeCompare(b.bill.date);
+  filteredRecords.sort((a, b) => {
+    const cmp = (a.record.date || "").localeCompare(b.record.date || "");
     return sortOrder === "asc" ? cmp : -cmp;
   });
 
   let renderedCount = 0;
-  filteredBillings.forEach(({ bill, idx }) => {
+  filteredRecords.forEach(({ record, idx }) => {
     renderedCount++;
+    const targetName = isWork ? record.name : record.student;
     const tr = document.createElement("tr");
+    const statusText = record.status === "paid" ? (isWork ? "已領" : "已繳") : (isWork ? "未領" : "未繳");
+    const switchFunc = isWork ? `toggleWorkBillStatus(${idx})` : `toggleBillStatus(${idx})`;
+    const editFunc = isWork ? `openWorkBillingModal(${idx})` : `openBillingModal(${idx})`;
+    const deleteFunc = isWork ? `deleteWorkBilling(${idx})` : `deleteBilling(${idx})`;
+
     tr.innerHTML = `
-      <td>${bill.date}</td>
-      <td><strong>${escapeHtml(bill.student)}</strong></td>
-      <td>${bill.hours}h</td>
-      <td>$${bill.rate}</td>
-      <td><strong style="color:var(--primary);">$${bill.total}</strong></td>
-      <td><span class="${bill.status === "paid" ? "tag-paid" : "tag-unpaid"}">${bill.status === "paid" ? "已繳" : "未繳"}</span></td>
-      <td>${escapeHtml(bill.notes || "-")}</td>
+      <td>${record.date}</td>
+      <td><strong>${escapeHtml(targetName)}</strong></td>
+      <td>${record.hours}h</td>
+      <td>$${record.rate}</td>
+      <td><strong style="color:var(--primary);">$${record.total}</strong></td>
+      <td><span class="${record.status === "paid" ? "tag-paid" : "tag-unpaid"}">${statusText}</span></td>
+      <td>${escapeHtml(record.notes || "-")}</td>
       <td>
-        <button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="toggleBillStatus(${idx})">切換</button>
-        <button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="openBillingModal(${idx})">編輯</button>
-        <button class="btn btn-danger" style="padding:2px 4px; font-size:0.68rem;" onclick="deleteBilling(${idx})">刪除</button>
+        <button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${switchFunc}">切換</button>
+        <button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${editFunc}">編輯</button>
+        <button class="btn btn-danger" style="padding:2px 4px; font-size:0.68rem;" onclick="${deleteFunc}">刪除</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -2099,11 +2424,14 @@ function renderBillings() {
   if (tuEl) tuEl.innerText = `$${totalUnpaid.toLocaleString()}`;
 }
 
+// ------------------------------------------
+// 家教帳務操作
+// ------------------------------------------
 function openBillingModal(editIndex = null) {
   currentEditingBillingIndex = editIndex;
   const modalTitle = document.getElementById("billing-modal-title");
   const sel = document.getElementById("bill-student-select");
-  sel.innerHTML = '<option value="">-- 從現有家教選擇 --</option>';
+  sel.innerHTML = '<option value="">-- 現有家教 --</option>';
   const added = new Set();
   (state.schedules || []).forEach((sch) => {
     (sch.tutorings || []).forEach((t) => {
@@ -2266,13 +2594,188 @@ function toggleBillStatus(idx) {
 }
 
 function deleteBilling(idx) {
-  if (confirm("確定要刪除這筆帳務記錄嗎？")) {
+  if (confirm("確定要刪除這筆家教帳務記錄嗎？")) {
     triggerHaptic(25);
     const target = state.billings[idx];
     if (target && target.id) {
       state.finances = (state.finances || []).filter((f) => f.id !== "fin_sync_" + target.id);
     }
     state.billings.splice(idx, 1);
+    saveToStorage();
+    renderBillings();
+    renderFinances();
+  }
+}
+
+// ------------------------------------------
+// 工作帳務操作
+// ------------------------------------------
+function openWorkBillingModal(editIndex = null) {
+  currentEditingWorkBillingIndex = editIndex;
+  const modalTitle = document.getElementById("wbill-modal-title");
+  const sel = document.getElementById("wbill-name-select");
+  sel.innerHTML = '<option value="">-- 現有工作 --</option>';
+  const added = new Set();
+  (state.schedules || []).forEach((sch) => {
+    (sch.works || []).forEach((w) => {
+      if (!added.has(w.name)) {
+        added.add(w.name);
+        const opt = document.createElement("option");
+        opt.value = w.name;
+        opt.innerText = w.name;
+        sel.appendChild(opt);
+      }
+    });
+  });
+
+  if (editIndex !== null && state.workBillings && state.workBillings[editIndex]) {
+    const item = state.workBillings[editIndex];
+    if (modalTitle) modalTitle.innerText = "編輯工作帳務記錄";
+    document.getElementById("wbill-date").value = item.date || "";
+    document.getElementById("wbill-name").value = item.name || "";
+    document.getElementById("wbill-hours").value = item.hours || "";
+    document.getElementById("wbill-rate").value = item.rate || "";
+    document.getElementById("wbill-total").value = item.total || "";
+    document.getElementById("wbill-status").value = item.status || "unpaid";
+    document.getElementById("wbill-notes").value = item.notes || "";
+  } else {
+    if (modalTitle) modalTitle.innerText = "新增工作帳務記錄";
+    const todayStr = formatDate(new Date());
+    document.getElementById("wbill-date").value = todayStr;
+    document.getElementById("wbill-name").value = "";
+    document.getElementById("wbill-hours").value = "4";
+    document.getElementById("wbill-status").value = "unpaid";
+    document.getElementById("wbill-notes").value = "";
+    updateWorkBillingRateByDateAndName();
+  }
+
+  document.getElementById("work-billing-modal").classList.add("active");
+}
+
+function onSelectBillingWork() {
+  const w = document.getElementById("wbill-name-select").value;
+  if (w) {
+    document.getElementById("wbill-name").value = w;
+    updateWorkBillingRateByDateAndName();
+  }
+}
+
+function onWorkBillingDateOrNameChange() {
+  updateWorkBillingRateByDateAndName();
+}
+
+function updateWorkBillingRateByDateAndName() {
+  if (currentEditingWorkBillingIndex !== null) return;
+  const dateStr = document.getElementById("wbill-date").value;
+  const workName = document.getElementById("wbill-name").value.trim();
+
+  if (!dateStr || !workName) {
+    if (!document.getElementById("wbill-rate").value) {
+      document.getElementById("wbill-rate").value = "";
+      calcWorkBillAmount();
+    }
+    return;
+  }
+
+  let matchedWorks = [];
+  (state.schedules || []).forEach((sch) => {
+    const matches = (sch.works || []).filter((w) => w.name === workName);
+    matchedWorks = matchedWorks.concat(matches);
+  });
+
+  if (matchedWorks.length > 0 && matchedWorks[0].rate) {
+    document.getElementById("wbill-rate").value = matchedWorks[0].rate;
+  } else {
+    if (!document.getElementById("wbill-rate").value) {
+      document.getElementById("wbill-rate").value = "";
+    }
+  }
+  calcWorkBillAmount();
+}
+
+function calcWorkBillAmount() {
+  const h = Number(document.getElementById("wbill-hours").value) || 0;
+  const r = Number(document.getElementById("wbill-rate").value) || 0;
+  document.getElementById("wbill-total").value = Math.round(h * r);
+}
+
+function saveWorkBillingRecord() {
+  triggerHaptic(20);
+  const date = document.getElementById("wbill-date").value;
+  const name = document.getElementById("wbill-name").value.trim();
+  const hours = document.getElementById("wbill-hours").value;
+  const rate = document.getElementById("wbill-rate").value;
+  const total = document.getElementById("wbill-total").value;
+  const status = document.getElementById("wbill-status").value;
+  const notes = document.getElementById("wbill-notes").value.trim();
+
+  if (!date || !name || !hours || !rate) {
+    alert("請填寫完整工作帳務資訊！");
+    return;
+  }
+  if (!state.workBillings) state.workBillings = [];
+  if (!state.finances) state.finances = [];
+
+  if (currentEditingWorkBillingIndex !== null) {
+    const oldItem = state.workBillings[currentEditingWorkBillingIndex];
+    const billingId = oldItem.id || "wbill_" + Date.now();
+    state.workBillings[currentEditingWorkBillingIndex] = { id: billingId, date, name, hours, rate, total, status, notes };
+
+    const finIdx = state.finances.findIndex((f) => f.id === "fin_sync_" + billingId);
+    if (finIdx > -1) {
+      state.finances[finIdx] = {
+        ...state.finances[finIdx],
+        date,
+        amount: Number(total),
+        notes: `工作收入: ${name} (${hours}hr)`
+      };
+    } else {
+      state.finances.unshift({
+        id: "fin_sync_" + billingId,
+        date,
+        type: "income",
+        parentCat: "💰 工作收入",
+        subCat: "兼職外快",
+        amount: Number(total),
+        notes: `工作收入: ${name} (${hours}hr)`
+      });
+    }
+  } else {
+    const billingId = "wbill_" + Date.now();
+    state.workBillings.unshift({ id: billingId, date, name, hours, rate, total, status, notes });
+
+    state.finances.unshift({
+      id: "fin_sync_" + billingId,
+      date,
+      type: "income",
+      parentCat: "💰 工作收入",
+      subCat: "兼職外快",
+      amount: Number(total),
+      notes: `工作收入: ${name} (${hours}hr)`
+    });
+  }
+
+  saveToStorage();
+  renderBillings();
+  renderFinances();
+  closeModal("work-billing-modal");
+}
+
+function toggleWorkBillStatus(idx) {
+  triggerHaptic(15);
+  state.workBillings[idx].status = state.workBillings[idx].status === "paid" ? "unpaid" : "paid";
+  saveToStorage();
+  renderBillings();
+}
+
+function deleteWorkBilling(idx) {
+  if (confirm("確定要刪除這筆工作帳務記錄嗎？")) {
+    triggerHaptic(25);
+    const target = state.workBillings[idx];
+    if (target && target.id) {
+      state.finances = (state.finances || []).filter((f) => f.id !== "fin_sync_" + target.id);
+    }
+    state.workBillings.splice(idx, 1);
     saveToStorage();
     renderBillings();
     renderFinances();
@@ -2992,7 +3495,7 @@ function renderFinances() {
 }
 
 // ==========================================
-// 調課邏輯與支援編輯
+// 調課邏輯與支援編輯 (學校、家教與工作)
 // ==========================================
 function openOverrideModal(ovrId = null) {
   currentEditingOverrideId = ovrId;
@@ -3002,7 +3505,7 @@ function openOverrideModal(ovrId = null) {
   const saveBtn = document.getElementById("ovr-save-btn");
   const delBtn = document.getElementById("ovr-delete-btn");
 
-  select.innerHTML = '<option value="">-- 選擇欲調動的課程 --</option>';
+  select.innerHTML = '<option value="">-- 選擇欲調動的課程或工作 --</option>';
   const monday = getMondayOfWeek(new Date(), currentWeekOffset);
   const dayNames = ["", "週一", "週二", "週三", "週四", "週五", "週六", "週日"];
 
@@ -3019,9 +3522,28 @@ function openOverrideModal(ovrId = null) {
       title: t.student,
       startTime: t.startTime,
       endTime: t.endTime,
-      desc: `${t.student} (${dayNames[dNum]} ${t.startTime}~${t.endTime})`
+      desc: `【家教】${t.student} (${dayNames[dNum]} ${t.startTime}~${t.endTime})`
     });
     opt.innerText = `【家教】${t.student} (${dayNames[dNum]} - ${dateStr})`;
+    select.appendChild(opt);
+  });
+
+  (sch.works || []).forEach((w) => {
+    const dNum = Number(w.day);
+    const curD = new Date(monday);
+    curD.setDate(monday.getDate() + (dNum - 1));
+    const dateStr = formatDate(curD);
+    const opt = document.createElement("option");
+    opt.value = JSON.stringify({
+      type: "work",
+      sourceId: w.id,
+      sourceDate: dateStr,
+      title: w.name,
+      startTime: w.startTime,
+      endTime: w.endTime,
+      desc: `【工作】${w.name} (${dayNames[dNum]} ${w.startTime}~${w.endTime})`
+    });
+    opt.innerText = `【工作】${w.name} (${dayNames[dNum]} - ${dateStr})`;
     select.appendChild(opt);
   });
 
@@ -3107,7 +3629,7 @@ function saveClassOverride() {
   triggerHaptic(20);
   const val = document.getElementById("ovr-source-select").value;
   if (!val) {
-    alert("請選擇欲調課課程！");
+    alert("請選擇欲調課課程或工作！");
     return;
   }
   const data = JSON.parse(val);

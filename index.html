@@ -84,6 +84,7 @@
       <button class="btn btn-warning" onclick="openOverrideModal()">臨時調課</button>
       <button class="btn btn-warning" onclick="openTempEventModal()">+ 臨時事件</button>
       <button class="btn" onclick="openTutoringModal()">+ 家教</button>
+      <button class="btn" style="background:#0d9488;" onclick="openWorkModal()">+ 工作</button>
 
       <!-- 對齊選項移至右半邊 -->
       <div style="margin-left:auto; display:inline-flex; align-items:center; gap:4px;">
@@ -98,8 +99,14 @@
     </div>
   </main>
 
-  <!-- 2. 家教帳務頁面 -->
+  <!-- 2. 家教 / 工作 帳務頁面 -->
   <section id="billing-view" class="billing-panel">
+    <!-- 帳務模式切換分頁 -->
+    <div class="billing-type-tabs">
+      <button class="billing-type-btn active" id="btn-billing-type-tutoring" onclick="switchBillingType('tutoring')">🧑‍🏫 家教帳務</button>
+      <button class="billing-type-btn" id="btn-billing-type-work" onclick="switchBillingType('work')">💼 工作帳務</button>
+    </div>
+
     <div class="month-filter-bar">
       <span style="font-weight:700; font-size:0.80rem;">月份：</span>
       <input type="month" id="bill-month-filter" onchange="renderBillings()">
@@ -125,7 +132,7 @@
         <div class="stat-val" id="stat-total-income">$0</div>
       </div>
       <div class="stat-box">
-        <div class="stat-title">未繳清金額</div>
+        <div class="stat-title" id="stat-unpaid-title">未繳清金額</div>
         <div class="stat-val" style="color:#ef4444;" id="stat-unpaid">$0</div>
       </div>
     </div>
@@ -136,7 +143,7 @@
     </div>
 
     <div class="control-bar" style="margin-top:6px;">
-      <button class="btn" onclick="openBillingModal()">+ 新增記錄</button>
+      <button class="btn" id="btn-add-billing-entry" onclick="openCurrentBillingModal()">+ 新增記錄</button>
     </div>
 
     <div style="overflow-x:auto;">
@@ -144,7 +151,7 @@
         <thead>
           <tr>
             <th>日期</th>
-            <th>學生</th>
+            <th id="th-billing-target">學生</th>
             <th>時數</th>
             <th>時薪</th>
             <th>應收</th>
@@ -228,7 +235,7 @@
     </div>
     <div class="mobile-tab-item" id="tab-btn-billing" onclick="switchView('billing')">
       <div class="mobile-tab-icon">💰</div>
-      <div>家教帳務</div>
+      <div id="nav-billing-text">帳務管理</div>
     </div>
     <div class="mobile-tab-item" id="tab-btn-finance" onclick="switchView('finance')">
       <div class="mobile-tab-icon">💳</div>
@@ -458,6 +465,77 @@
     </div>
   </div>
 
+  <!-- 工作設定彈窗 -->
+  <div class="modal" id="work-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="work-modal-title">工作排程設定</div>
+      <div class="form-group">
+        <label>快速選擇歷史工作</label>
+        <select id="work-preset-select" onchange="onSelectPresetWork(this.value)">
+          <option value="">-- 選擇已存在的工作資料自動帶入 --</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>工作排程類型 *</label>
+          <select id="work-type">
+            <option value="fixed">固定工作 (每週常規)</option>
+            <option value="weekly">每週工作 (僅限當週)</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>星期 *</label>
+          <select id="work-day">
+            <option value="1">週一</option><option value="2">週二</option>
+            <option value="3">週三</option><option value="4">週四</option>
+            <option value="5">週五</option><option value="6">週六</option>
+            <option value="7">週日</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>工作名稱 *</label>
+        <input type="text" id="work-name" placeholder="例如：圖書館櫃台、專案兼職">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>開始時間 *</label>
+          <input type="time" id="work-start-time" value="09:00">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>結束時間 *</label>
+          <input type="time" id="work-end-time" value="12:00">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>工作地點 *</label>
+        <input type="text" id="work-location" placeholder="例如：校總圖二樓、台北辦公室">
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>工作時薪 ($/hr)</label>
+          <input type="number" id="work-rate" placeholder="例如：190">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>工作底色</label>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <input type="color" id="work-color" value="#ccfbf1" style="width:40px; height:32px; padding:0; border:none; border-radius:4px; cursor:pointer;">
+            <button type="button" class="btn btn-secondary" style="font-size:0.68rem; padding:4px 6px;" onclick="resetWorkColor()">恢復主題最適色</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>工作備註</label>
+        <textarea id="work-memo" rows="2" placeholder="備註或工作提醒事項"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="work-delete-btn" onclick="deleteWorkClass()" style="margin-right:auto;">刪除</button>
+        <button class="btn btn-secondary" onclick="closeModal('work-modal')">取消</button>
+        <button class="btn" onclick="saveWorkClass()">儲存</button>
+      </div>
+    </div>
+  </div>
+
   <!-- 唯讀詳細預覽彈窗 -->
   <div class="modal" id="view-detail-modal">
     <div class="modal-content">
@@ -499,7 +577,7 @@
     <div class="modal-content">
       <div class="modal-header" id="override-modal-title">臨時調課設定與管理</div>
       <div class="form-group">
-        <label>選擇欲調動課程 (學校課程或家教) *</label>
+        <label>選擇欲調動課程 (學校、家教或工作) *</label>
         <select id="ovr-source-select" onchange="populateOverrideOriginal()">
           <option value="">-- 選擇欲調動的課程 --</option>
         </select>
@@ -596,10 +674,10 @@
     </div>
   </div>
 
-  <!-- 帳務新增彈窗 -->
+  <!-- 家教帳務新增/編輯彈窗 -->
   <div class="modal" id="billing-modal">
     <div class="modal-content">
-      <div class="modal-header" id="billing-modal-title">新增 / 編輯 帳務記錄</div>
+      <div class="modal-header" id="billing-modal-title">新增 / 編輯 家教帳務記錄</div>
       <div class="form-group">
         <label>上課 / 繳費日期 *</label>
         <input type="date" id="bill-date" onchange="onBillingDateOrStudentChange()">
@@ -641,6 +719,55 @@
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="closeModal('billing-modal')">取消</button>
         <button class="btn" onclick="saveBillingRecord()">儲存記錄</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 工作帳務新增/編輯彈窗 -->
+  <div class="modal" id="work-billing-modal">
+    <div class="modal-content">
+      <div class="modal-header" id="wbill-modal-title">新增 / 編輯 工作帳務記錄</div>
+      <div class="form-group">
+        <label>工作 / 發薪日期 *</label>
+        <input type="date" id="wbill-date" onchange="onWorkBillingDateOrNameChange()">
+      </div>
+      <div class="form-group">
+        <label>工作名稱 *</label>
+        <div class="form-row">
+          <select id="wbill-name-select" style="flex:1;" onchange="onSelectBillingWork()">
+            <option value="">-- 現有工作 --</option>
+          </select>
+          <input type="text" id="wbill-name" style="flex:1;" oninput="onWorkBillingDateOrNameChange()">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="flex:1;">
+          <label>時數 (hr) *</label>
+          <input type="number" step="0.5" id="wbill-hours" oninput="calcWorkBillAmount()">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>時薪 ($/hr) *</label>
+          <input type="number" id="wbill-rate" oninput="calcWorkBillAmount()">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>合計應收金額 ($)</label>
+        <input type="number" id="wbill-total" readonly style="background:var(--table-th-bg); font-weight:700;">
+      </div>
+      <div class="form-group">
+        <label>款項狀態</label>
+        <select id="wbill-status">
+          <option value="unpaid">未領取</option>
+          <option value="paid">已領取</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>備註說明</label>
+        <input type="text" id="wbill-notes">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="closeModal('work-billing-modal')">取消</button>
+        <button class="btn" onclick="saveWorkBillingRecord()">儲存記錄</button>
       </div>
     </div>
   </div>
