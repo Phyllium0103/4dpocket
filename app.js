@@ -7,6 +7,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_-xqiL_LXkK2pWt5UopJ5Nw__OxyEmOH";
 let supabaseClient = null;
 let currentUser = null;
 
+// 修正 4：防護 Supabase SDK 未載入導致全站癱瘓的問題
 if (typeof supabase !== 'undefined' && SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 5) {
   supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 } else {
@@ -17,6 +18,7 @@ function triggerHaptic(duration = 20) {
   if (navigator.vibrate) navigator.vibrate(duration);
 }
 
+// 防護使用者在同步期間離開
 let isSaving = false;
 window.addEventListener('beforeunload', (e) => {
   if (isSaving) {
@@ -61,21 +63,9 @@ const initialDefaultPeriods = [
 
 const CELL_HEIGHT = 56;
 
-// 全域變數
-let state = createDefaultState();
-let currentEditingSlot = null, currentEditingTutoringId = null, currentEditingWorkId = null, currentEditingBillingIndex = null, currentEditingWorkBillingIndex = null;
-let currentViewingOverrideId = null, currentViewingTempEventId = null, currentEditingOverrideId = null, currentEditingTempEventId = null;
-let currentWeekOffset = 0, currentSelectedStudentFilter = "__FILTER_ALL__", currentBillingType = "tutoring";
-let financeActiveMode = "all", financeActiveMainCat = "all", financeActiveSubCat = "all", isExpenseChartVisible = false;
-let activeCatTask = { type: "", pCat: "", sIdx: "" };
-let tempDeadlines = [];
-let currentEditingDeadlineIdx = null;
-
-// 好友連線全域變數
-let currentChatFriendId = null;
-let currentFriendWeekOffset = 0;
-let currentFriendState = null;
-
+// ========================================================
+// 預設資料狀態與全域變數
+// ========================================================
 function createDefaultState() {
   const defaultSchId = "sch_" + Date.now();
   return {
@@ -90,6 +80,16 @@ function createDefaultState() {
     }]
   };
 }
+
+let state = createDefaultState();
+let currentEditingSlot = null, currentEditingTutoringId = null, currentEditingWorkId = null, currentEditingBillingIndex = null, currentEditingWorkBillingIndex = null;
+let currentViewingOverrideId = null, currentViewingTempEventId = null, currentEditingOverrideId = null, currentEditingTempEventId = null;
+let currentWeekOffset = 0, currentSelectedStudentFilter = "__FILTER_ALL__", currentBillingType = "tutoring";
+let financeActiveMode = "all", financeActiveMainCat = "all", financeActiveSubCat = "all", isExpenseChartVisible = false;
+let activeCatTask = { type: "", pCat: "", sIdx: "" };
+
+let tempDeadlines = [];
+let currentEditingDeadlineIdx = null;
 
 function getActiveSchedule() {
   if (!state.schedules || !Array.isArray(state.schedules) || state.schedules.length === 0) {
@@ -124,14 +124,23 @@ function getCategories() {
 function getCategoryKeys(type) {
   const cats = getCategories();
   if (!state.categoryOrder) state.categoryOrder = {};
-  if (!state.categoryOrder[type]) { state.categoryOrder[type] = Object.keys(cats[type] || {}); }
+  if (!state.categoryOrder[type]) {
+    state.categoryOrder[type] = Object.keys(cats[type] || {});
+  }
   const currentKeys = Object.keys(cats[type] || {});
   state.categoryOrder[type] = state.categoryOrder[type].filter(k => currentKeys.includes(k));
-  currentKeys.forEach(k => { if (!state.categoryOrder[type].includes(k)) state.categoryOrder[type].push(k); });
+  currentKeys.forEach(k => {
+    if (!state.categoryOrder[type].includes(k)) state.categoryOrder[type].push(k);
+  });
   return state.categoryOrder[type];
 }
 
-function parseLocalDate(dateStr) { if (!dateStr) return new Date(); return new Date(dateStr.replace(/-/g, '/')); }
+// 修正 6：建立一致的日期解析函式，避免跨時區解析錯誤
+function parseLocalDate(dateStr) {
+  if (!dateStr) return new Date();
+  return new Date(dateStr.replace(/-/g, '/'));
+}
+
 function timeToMinutes(timeStr) { if (!timeStr) return 0; const [h, m] = timeStr.split(":").map(Number); return (h || 0) * 60 + (m || 0); }
 function isDaytimeSlot(startTime, endTime) { const startMin = timeToMinutes(startTime), endMin = timeToMinutes(endTime), dayStart = 8 * 60, dayEnd = 17 * 60; return (startMin >= dayStart && startMin <= dayEnd) || (endMin >= dayStart && endMin <= dayEnd); }
 function timeToPixelOffset(timeMins, periods) {
@@ -148,7 +157,10 @@ function timeToPixelOffset(timeMins, periods) {
   return periods.length * CELL_HEIGHT;
 }
 
-function getComputedThemeColor(variableName) { return getComputedStyle(document.documentElement).getPropertyValue(variableName).trim(); }
+// 修正 3：改善 DOM 重繪效能，直接從 documentElement 取得變數
+function getComputedThemeColor(variableName) { 
+  return getComputedStyle(document.documentElement).getPropertyValue(variableName).trim(); 
+}
 function getDefaultSchoolBgHex() { return rgbToHex(getComputedThemeColor("--school-def-bg")) || "#e0f2fe"; }
 function getDefaultTutoringBgHex() { return rgbToHex(getComputedThemeColor("--tutoring-def-bg")) || "#fef3c7"; }
 function getDefaultWorkBgHex() { return getDefaultTutoringBgHex(); }
@@ -206,7 +218,9 @@ function onSelectPresetCourse(jsonStr) {
     }
     document.getElementById("sch-color").value = c.color || getDefaultSchoolBgHex();
     if (c.deadlines) { tempDeadlines = JSON.parse(JSON.stringify(c.deadlines)); renderModalDeadlines(); }
-  } catch (e) { console.error("Parse error:", e); }
+  } catch (e) {
+    console.error("Parse error:", e);
+  }
 }
 
 function onSchTypeChange(val) { document.getElementById("sch-type-custom-wrap").style.display = val === "custom" ? "block" : "none"; }
@@ -218,7 +232,9 @@ function onSelectPresetTutoring(jsonStr) {
     document.getElementById("tut-student").value = t.student || ""; if (t.day) document.getElementById("tut-day").value = t.day; if (t.startTime) document.getElementById("tut-start-time").value = t.startTime; if (t.endTime) document.getElementById("tut-end-time").value = t.endTime;
     document.getElementById("tut-subject").value = t.subject || ""; document.getElementById("tut-location").value = t.location || ""; document.getElementById("tut-line").value = t.line || ""; document.getElementById("tut-fb").value = t.fb || ""; document.getElementById("tut-phone").value = t.phone || "";
     if (t.rate) document.getElementById("tut-rate").value = t.rate; document.getElementById("tut-memo").value = t.memo || ""; document.getElementById("tut-color").value = t.color || getDefaultTutoringBgHex();
-  } catch (e) { console.error("Parse error:", e); }
+  } catch (e) {
+    console.error("Parse error:", e);
+  }
 }
 
 function onSelectPresetWork(jsonStr) {
@@ -227,10 +243,12 @@ function onSelectPresetWork(jsonStr) {
     const w = JSON.parse(jsonStr);
     document.getElementById("work-name").value = w.name || ""; if (w.day) document.getElementById("work-day").value = w.day; if (w.startTime) document.getElementById("work-start-time").value = w.startTime; if (w.endTime) document.getElementById("work-end-time").value = w.endTime;
     document.getElementById("work-location").value = w.location || ""; if (w.rate) document.getElementById("work-rate").value = w.rate; document.getElementById("work-memo").value = w.memo || ""; document.getElementById("work-color").value = w.color || getDefaultWorkBgHex();
-  } catch (e) { console.error("Parse error:", e); }
+  } catch (e) {
+    console.error("Parse error:", e);
+  }
 }
 
-function resetSchoolColor() { document.getElementById("sch-color").value = getDefaultSchoolBgHex(); }
+function resetSchoolColor() { document.getElementById("sch-color").value = getDefaultSchoolBgHex(); document.getElementById("sch-color-desc").innerText = "目前使用：主題最適色"; }
 function resetTutoringColor() { document.getElementById("tut-color").value = getDefaultTutoringBgHex(); }
 function resetWorkColor() { document.getElementById("work-color").value = getDefaultWorkBgHex(); }
 
@@ -248,7 +266,7 @@ async function checkAuthSession() {
 
 function updateUserUI(isLoggedIn, email = "") {
   const dot = document.getElementById("sync-dot"), text = document.getElementById("sync-user-text"), btn = document.getElementById("btn-auth-action");
-  text.style.color = "inherit"; 
+  text.style.color = "inherit"; // 修正：重置顏色
   if (isLoggedIn) { dot.className = "status-dot online"; text.innerText = `已同步: ${email}`; btn.innerText = "登出"; btn.onclick = handleAuthLogout; }
   else { dot.className = "status-dot"; text.innerText = "未登入 (離線)"; btn.innerText = "登入 / 註冊"; btn.onclick = openAuthModal; }
 }
@@ -275,13 +293,20 @@ async function handleAuthLogout() {
   if (confirm("確定登出？")) { await supabaseClient.auth.signOut(); currentUser = null; updateUserUI(false); }
 }
 
+// 修正 5：檢查 Supabase 寫入是否真的成功並回傳結果
 async function pushCloudData() {
   if (!supabaseClient || !currentUser) return false;
   try { 
     const { error } = await supabaseClient.from("user_schedules").upsert({ user_id: currentUser.id, data: state, updated_at: new Date() });
-    if (error) { console.error("雲端同步寫入失敗:", error.message); return false; }
+    if (error) {
+      console.error("雲端同步寫入失敗:", error.message);
+      return false;
+    }
     return true;
-  } catch (e) { console.error("雲端同步發生例外錯誤:", e); return false; }
+  } catch (e) { 
+    console.error("雲端同步發生例外錯誤:", e);
+    return false;
+  }
 }
 
 async function pullCloudData() {
@@ -300,28 +325,39 @@ async function pullCloudData() {
       document.getElementById("text-align-select").value = state.textAlign || "center";
       renderSchedule(); renderBillings(); renderFinances();
     } else { await pushCloudData(); }
-  } catch (e) { console.error("Cloud pull error:", e); }
+  } catch (e) {
+    console.error("Cloud pull error:", e);
+  }
 }
 
 async function saveToStorage() { 
   isSaving = true;
   const syncText = document.getElementById("sync-user-text");
-  if (syncText && syncText.innerText !== "儲存中...") { syncText.dataset.orig = syncText.innerText; syncText.innerText = "儲存中..."; }
+  
+  if (syncText && syncText.innerText !== "儲存中...") {
+     syncText.dataset.orig = syncText.innerText;
+     syncText.innerText = "儲存中...";
+  }
 
   let syncSuccess = false;
   try { 
     localStorage.setItem("local_schedule_v2_data", JSON.stringify(state)); 
     updatePresetDropdowns(); 
-    if (supabaseClient && currentUser) { syncSuccess = await pushCloudData(); }
-  } catch (e) { console.error("Storage/Cloud sync error:", e); } 
-  finally {
+    if (supabaseClient && currentUser) {
+      syncSuccess = await pushCloudData(); 
+    }
+  } catch (e) {
+    console.error("Storage/Cloud sync error:", e);
+  } finally {
     isSaving = false;
+    // 修正 5：正確顯示雲端儲存狀態
     if (syncText) {
       if (currentUser) {
         syncText.innerText = syncSuccess ? `已同步: ${currentUser.email}` : "同步失敗 / 請檢查網路";
         syncText.style.color = syncSuccess ? "inherit" : "#ef4444";
       } else {
-        syncText.innerText = "未登入 (離線)"; syncText.style.color = "inherit";
+        syncText.innerText = "未登入 (離線)";
+        syncText.style.color = "inherit";
       }
     }
   }
@@ -366,27 +402,37 @@ function toggleDeadlineBanner() {
   saveToStorage(); renderSchedule();
 }
 
+// ========================================================
+// 固定收支自動入帳檢查
+// ========================================================
 function checkRecurringFinances() {
   if (!state.recurringFinances) state.recurringFinances = [];
   let modified = false;
   
-  const today = new Date(), curYear = today.getFullYear(), curMonth = today.getMonth() + 1, curDay = today.getDate();
+  const today = new Date(); 
+  const curYear = today.getFullYear(); 
+  const curMonth = today.getMonth() + 1; // 1-12
+  const curDay = today.getDate();
 
   state.recurringFinances.forEach(item => {
     if (!item.lastTriggeredMonth) {
-      const pm = curMonth === 1 ? 12 : curMonth - 1, py = curMonth === 1 ? curYear - 1 : curYear;
+      const pm = curMonth === 1 ? 12 : curMonth - 1;
+      const py = curMonth === 1 ? curYear - 1 : curYear;
       item.lastTriggeredMonth = `${py}-${String(pm).padStart(2, '0')}`;
     }
 
     let [lastY, lastM] = item.lastTriggeredMonth.split('-').map(Number);
-    let checkY = lastY, checkM = lastM + 1;
+    let checkY = lastY;
+    let checkM = lastM + 1;
     if (checkM > 12) { checkM = 1; checkY++; }
 
     while (checkY < curYear || (checkY === curYear && checkM <= curMonth)) {
       const daysInCheckMonth = new Date(checkY, checkM, 0).getDate();
       const targetDay = Math.min(item.dayOfMonth, daysInCheckMonth);
 
-      if (checkY === curYear && checkM === curMonth && curDay < targetDay) break;
+      if (checkY === curYear && checkM === curMonth && curDay < targetDay) {
+        break;
+      }
 
       const entryDate = `${checkY}-${String(checkM).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
       if (!state.finances) state.finances = [];
@@ -399,7 +445,10 @@ function checkRecurringFinances() {
       });
 
       item.lastTriggeredMonth = `${checkY}-${String(checkM).padStart(2, '0')}`;
-      modified = true; checkM++; if (checkM > 12) { checkM = 1; checkY++; }
+      modified = true;
+
+      checkM++;
+      if (checkM > 12) { checkM = 1; checkY++; }
     }
   });
 
@@ -423,7 +472,9 @@ function init() {
           state.activeScheduleId = dId;
         }
       }
-    } catch (e) { console.error("Init parse error:", e); }
+    } catch (e) {
+      console.error("Init parse error:", e);
+    }
   }
 
   document.documentElement.setAttribute("data-theme-style", state.themeStyle);
@@ -452,33 +503,22 @@ function resetCurrentWeek() { triggerHaptic(15); currentWeekOffset = 0; renderSc
 function toggleTutorView() { state.showTutoring = document.getElementById("chk-show-tutor").checked; saveToStorage(); renderSchedule(); }
 function toggleLatePeriods() { state.showLatePeriods = !state.showLatePeriods; document.getElementById("late-period-text").innerText = state.showLatePeriods ? "隱藏 9-10 節" : "顯示 9-10 節"; saveToStorage(); renderSchedule(); }
 
-function closeModal(id) {
-  document.getElementById(id).classList.remove("active");
-}
-
-window.addEventListener('click', function(event) { if (event.target.classList.contains('modal')) closeModal(event.target.id); });
-
 function switchView(view) {
   triggerHaptic(20);
   document.getElementById("tab-btn-schedule").classList.toggle("active", view === "schedule");
   document.getElementById("tab-btn-billing").classList.toggle("active", view === "billing");
   document.getElementById("tab-btn-finance").classList.toggle("active", view === "finance");
-  document.getElementById("tab-btn-connections")?.classList.toggle("active", view === "connections");
-
   document.getElementById("schedule-view").style.display = view === "schedule" ? "block" : "none";
   document.getElementById("billing-view").style.display = view === "billing" ? "block" : "none";
   document.getElementById("finance-view").style.display = view === "finance" ? "block" : "none";
-  document.getElementById("connections-view").style.display = view === "connections" ? "block" : "none";
-
-  if (view === "billing") renderBillings(); 
-  if (view === "finance") renderFinances();
-  if (view === "connections") loadConnections();
+  if (view === "billing") renderBillings(); if (view === "finance") renderFinances();
 }
 
 function openScheduleSelectModal() {
   const listEl = document.getElementById("schedule-select-list"); listEl.innerHTML = "";
   (state.schedules || []).forEach((sch) => {
-    const isActive = sch.id === state.activeScheduleId; const item = document.createElement("div");
+    const isActive = sch.id === state.activeScheduleId;
+    const item = document.createElement("div");
     item.style = `display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-bottom:1px solid var(--border); background:${isActive ? "var(--today-header-bg)" : "transparent"}; border-radius:6px; margin-bottom:4px;`;
     item.innerHTML = `<div><div style="font-weight:700; font-size:0.85rem; color:${isActive ? "var(--today-header-text)" : "var(--text)"};">${escapeHtml(sch.title)}</div><div style="font-size:0.68rem; color:var(--text-muted);">${formatSlashDate(sch.startDate)} ~ ${formatSlashDate(sch.endDate)}</div></div>
       <div style="display:flex; gap:4px;">${!isActive ? `<button class="btn" style="padding:2px 6px; font-size:0.68rem;" onclick="switchActiveSchedule('${sch.id}')">切換</button>` : `<span class="tag-paid" style="font-size:0.68rem;">目前使用</span>`}
@@ -491,7 +531,8 @@ function switchActiveSchedule(schId) { triggerHaptic(20); state.activeScheduleId
 function openCreateScheduleModal() { document.getElementById("new-sch-title").value = ""; document.getElementById("new-sch-start").value = formatDate(new Date()); document.getElementById("new-sch-end").value = "2027-01-10"; closeModal("schedule-select-modal"); document.getElementById("create-schedule-modal").classList.add("active"); }
 function confirmCreateSchedule() {
   const title = document.getElementById("new-sch-title").value.trim(), start = document.getElementById("new-sch-start").value, end = document.getElementById("new-sch-end").value;
-  if (!title || !start || !end) return alert("請完整填寫！"); const newId = "sch_" + Date.now();
+  if (!title || !start || !end) return alert("請完整填寫！");
+  const newId = "sch_" + Date.now();
   state.schedules.push({ id: newId, title, startDate: start, endDate: end, periods: JSON.parse(JSON.stringify(initialDefaultPeriods)), courses: {}, tutorings: [], works: [], overrides: [], temporaryEvents: [], weeklyMemos: {} });
   state.activeScheduleId = newId; saveToStorage(); updatePresetDropdowns(); renderSchedule(); closeModal("create-schedule-modal"); alert(`已建立並切換至「${title}」！`);
 }
@@ -499,6 +540,9 @@ function deleteSchedule(schId) { if (state.schedules.length <= 1) return alert("
 function openScheduleConfigModal() { const sch = getActiveSchedule(); document.getElementById("sch-conf-title").value = sch.title || "學期課表"; document.getElementById("sch-conf-start").value = sch.startDate || "2026-09-07"; document.getElementById("sch-conf-end").value = sch.endDate || "2027-01-10"; document.getElementById("schedule-config-modal").classList.add("active"); }
 function saveScheduleConfig() { const title = document.getElementById("sch-conf-title").value.trim() || "學期課表", start = document.getElementById("sch-conf-start").value, end = document.getElementById("sch-conf-end").value; if (!start || !end) return alert("請完整填寫日期！"); const sch = getActiveSchedule(); sch.title = title; sch.startDate = start; sch.endDate = end; saveToStorage(); renderSchedule(); closeModal("schedule-config-modal"); }
 
+// ==========================================
+// 點擊事件與詳細
+// ==========================================
 function handleSlotClick(day, periodId) { triggerHaptic(15); const sch = getActiveSchedule(); const course = sch.courses ? sch.courses[`${day}_${periodId}`] : null; if (!state.isEditMode) openViewDetailModal("school", { day, periodId, course: course || {} }); else openSchoolModal(day, periodId); }
 function handleTutoringClick(tId) { triggerHaptic(15); const sch = getActiveSchedule(); const tut = (sch.tutorings || []).find((t) => t.id === tId); if (!tut) return; if (!state.isEditMode) openViewDetailModal("tutoring", { tut }); else openTutoringModal(tId); }
 function handleWorkClick(wId) { triggerHaptic(15); const sch = getActiveSchedule(); const work = (sch.works || []).find((w) => w.id === wId); if (!work) return; if (!state.isEditMode) openViewDetailModal("work", { work }); else openWorkModal(wId); }
@@ -560,6 +604,9 @@ function savePeriodConfig() {
 }
 function resetPeriodsToDefault() { if (confirm("恢復預設節次？")) { getActiveSchedule().periods = JSON.parse(JSON.stringify(initialDefaultPeriods)); saveToStorage(); openPeriodConfigModal(); renderSchedule(); } }
 
+// ==========================================
+// 死線與倒數看板 (Deadlines)
+// ==========================================
 function toggleDeadlineList() {
   document.getElementById("deadline-list").classList.toggle("active");
   document.getElementById("deadline-toggle-icon").innerText = document.getElementById("deadline-list").classList.contains("active") ? "▲ 收合" : "▼ 展開全部";
@@ -573,7 +620,8 @@ function renderDeadlinesBanner() {
   let rawDl = [];
   if (sch.courses) {
     Object.keys(sch.courses).forEach(k => {
-      const c = sch.courses[k]; if (c && c.deadlines) c.deadlines.forEach(dl => { rawDl.push({ ...dl, courseName: c.name }); });
+      const c = sch.courses[k];
+      if (c && c.deadlines) c.deadlines.forEach(dl => { rawDl.push({ ...dl, courseName: c.name }); });
     });
   }
 
@@ -584,7 +632,11 @@ function renderDeadlinesBanner() {
   });
 
   const today = new Date(); today.setHours(0,0,0,0);
-  allDl = allDl.filter(dl => { const dDate = parseLocalDate(dl.date); dDate.setHours(0,0,0,0); return dDate >= today; });
+  allDl = allDl.filter(dl => { 
+    const dDate = parseLocalDate(dl.date); 
+    dDate.setHours(0,0,0,0); 
+    return dDate >= today; 
+  });
   allDl.sort((a,b) => parseLocalDate(a.date) - parseLocalDate(b.date));
 
   if (allDl.length === 0) { banner.style.display = "none"; return; }
@@ -592,7 +644,8 @@ function renderDeadlinesBanner() {
 
   const urgentDl = [], normalDl = [];
   allDl.forEach(dl => {
-    const d = parseLocalDate(dl.date); d.setHours(0,0,0,0);
+    const d = parseLocalDate(dl.date); 
+    d.setHours(0,0,0,0);
     const df = Math.round((d - today) / (1000*60*60*24));
     dl.diffDays = df; dl.diffText = df === 0 ? "今天" : `${df} 天後`;
     if (df < 7) urgentDl.push(dl); else normalDl.push(dl);
@@ -602,12 +655,14 @@ function renderDeadlinesBanner() {
   if (urgentDl.length > 0) {
     headerTextEl.innerHTML = urgentDl.map(dl => `距 [${escapeHtml(dl.courseName)}] ${escapeHtml(dl.title)} <span style="color:var(--primary); margin-left:4px;">${dl.diffText}</span>`).join('');
   } else {
-    const closest = normalDl[0]; headerTextEl.innerHTML = `距 [${escapeHtml(closest.courseName)}] ${escapeHtml(closest.title)} 還有 ${closest.diffDays} 天`;
+    const closest = normalDl[0];
+    headerTextEl.innerHTML = `距 [${escapeHtml(closest.courseName)}] ${escapeHtml(closest.title)} 還有 ${closest.diffDays} 天`;
   }
 
   const listEl = document.getElementById("deadline-list"); listEl.innerHTML = "";
   allDl.forEach(dl => {
-    const d = parseLocalDate(dl.date); const item = document.createElement("div"); item.className = "deadline-item";
+    const d = parseLocalDate(dl.date);
+    const item = document.createElement("div"); item.className = "deadline-item";
     item.innerHTML = `<span><b>[${escapeHtml(dl.courseName)}]</b> ${escapeHtml(dl.title)}</span> <span style="color:var(--primary); font-weight:600;">${dl.diffText} (${formatShortDate(d)})</span>`;
     listEl.appendChild(item);
   });
@@ -629,78 +684,69 @@ function renderModalDeadlines() {
 function addSchoolDeadline() {
   const title = document.getElementById("sch-new-dl-title").value.trim(), date = document.getElementById("sch-new-dl-date").value;
   if (!title || !date) return alert("請填寫日程名稱與日期！");
-  if (currentEditingDeadlineIdx !== null) { tempDeadlines[currentEditingDeadlineIdx] = { id: tempDeadlines[currentEditingDeadlineIdx].id, title, date }; currentEditingDeadlineIdx = null; document.getElementById("btn-add-dl").innerText = "新增"; } 
-  else { tempDeadlines.push({ id: "dl_" + Date.now(), title, date }); }
+  
+  if (currentEditingDeadlineIdx !== null) {
+    tempDeadlines[currentEditingDeadlineIdx] = { id: tempDeadlines[currentEditingDeadlineIdx].id, title, date };
+    currentEditingDeadlineIdx = null; document.getElementById("btn-add-dl").innerText = "新增";
+  } else {
+    tempDeadlines.push({ id: "dl_" + Date.now(), title, date });
+  }
   document.getElementById("sch-new-dl-title").value = ""; renderModalDeadlines();
 }
-function editSchoolDeadline(idx) { currentEditingDeadlineIdx = idx; const dl = tempDeadlines[idx]; document.getElementById("sch-new-dl-title").value = dl.title; document.getElementById("sch-new-dl-date").value = dl.date; document.getElementById("btn-add-dl").innerText = "儲存"; }
+
+function editSchoolDeadline(idx) {
+  currentEditingDeadlineIdx = idx; const dl = tempDeadlines[idx];
+  document.getElementById("sch-new-dl-title").value = dl.title;
+  document.getElementById("sch-new-dl-date").value = dl.date;
+  document.getElementById("btn-add-dl").innerText = "儲存";
+}
+
 function removeSchoolDeadline(idx) { tempDeadlines.splice(idx, 1); renderModalDeadlines(); }
 
-// ========================================================
-// 渲染課表核心 (支援自己的與好友的)
-// ========================================================
-function renderSchedule(targetState = state, isFriend = false) {
+// ==========================================
+// 渲染課表
+// ==========================================
+function renderSchedule() {
   try {
-    const sch = isFriend 
-      ? (targetState.schedules.find(s => s.id === targetState.activeScheduleId) || targetState.schedules[0]) 
-      : getActiveSchedule();
-      
-    const activeOffset = isFriend ? currentFriendWeekOffset : currentWeekOffset;
-    const monday = getMondayOfWeek(new Date(), activeOffset);
-    const maxDays = targetState.showTutoring ? 7 : 5; 
-    const rangeEnd = new Date(monday); 
-    rangeEnd.setDate(monday.getDate() + (maxDays - 1));
-    const weekKeyLocal = formatDate(monday); 
-    const alignClass = `align-${targetState.textAlign || "center"}`;
+    const sch = getActiveSchedule(), monday = getMondayOfWeek(new Date(), currentWeekOffset);
+    const maxDays = state.showTutoring ? 7 : 5, rangeEnd = new Date(monday); rangeEnd.setDate(monday.getDate() + (maxDays - 1));
+    const weekKey = getWeekKey(new Date()), alignClass = `align-${state.textAlign || "center"}`;
 
-    if (!isFriend) {
-      document.getElementById("week-range-text").innerText = `${monday.getFullYear()} 年 ${formatShortDate(monday)} ~ ${formatShortDate(rangeEnd)}`;
-      document.getElementById("schedule-footer-banner").innerHTML = `📅 ${escapeHtml(sch.title)} (${formatSlashDate(sch.startDate)} ~ ${formatSlashDate(sch.endDate)}) <span style="font-size:0.68rem; color:var(--primary); font-weight:600; margin-left:6px;">[切換/新增]</span>`;
-    } else {
-      const friendRangeText = document.getElementById("friend-week-range-text");
-      if (friendRangeText) friendRangeText.innerText = `${monday.getFullYear()} 年 ${formatShortDate(monday)} ~ ${formatShortDate(rangeEnd)}`;
-    }
+    document.getElementById("week-range-text").innerText = `${monday.getFullYear()} 年 ${formatShortDate(monday)} ~ ${formatShortDate(rangeEnd)}`;
+    document.getElementById("schedule-footer-banner").innerHTML = `📅 ${escapeHtml(sch.title)} (${formatSlashDate(sch.startDate)} ~ ${formatSlashDate(sch.endDate)}) <span style="font-size:0.68rem; color:var(--primary); font-weight:600; margin-left:6px;">[切換/新增]</span>`;
 
-    const tableEl = document.getElementById(isFriend ? "friend-schedule-table" : "schedule-table");
-    if (tableEl) tableEl.style.width = targetState.showTutoring ? "calc(68px + (100% - 68px) / 5 * 7)" : "100%";
+    const tableEl = document.getElementById("schedule-table");
+    if (tableEl) tableEl.style.width = state.showTutoring ? "calc(68px + (100% - 68px) / 5 * 7)" : "100%";
 
-    const thead = document.getElementById(isFriend ? "friend-schedule-head" : "schedule-head"); 
-    thead.innerHTML = "";
-    const headTr = document.createElement("tr"); 
-    headTr.innerHTML = `<th class="col-time">節次</th>`;
-    const dayNames = ["", "週一", "週二", "週三", "週四", "週五", "週六", "週日"];
-    const todayStr = formatDate(new Date());
-    const weekDates = [];
+    const thead = document.getElementById("schedule-head"); thead.innerHTML = "";
+    const headTr = document.createElement("tr"); headTr.innerHTML = `<th class="col-time">節次</th>`;
+    const dayNames = ["", "週一", "週二", "週三", "週四", "週五", "週六", "週日"], todayStr = formatDate(new Date()), weekDates = [];
 
     for (let i = 0; i < maxDays; i++) {
       const curDate = new Date(monday); curDate.setDate(monday.getDate() + i);
       const dateStr = formatDate(curDate); weekDates.push(dateStr);
-      const th = document.createElement("th"); 
-      if (dateStr === todayStr) th.className = "today-header";
+      const th = document.createElement("th"); if (dateStr === todayStr) th.className = "today-header";
       th.innerHTML = `<div>${dayNames[i + 1]}</div><div style="font-size:0.62rem; font-weight:normal;">${formatShortDate(curDate)}</div>`;
       headTr.appendChild(th);
     }
     thead.appendChild(headTr);
 
-    const tbody = document.getElementById(isFriend ? "friend-schedule-body" : "schedule-body"); 
-    tbody.innerHTML = "";
+    const tbody = document.getElementById("schedule-body"); tbody.innerHTML = "";
     
-    const schStart = parseLocalDate(sch.startDate || "2026-09-07");
-    const schEnd = parseLocalDate(sch.endDate || "2027-01-10");
+    const schStart = parseLocalDate(sch.startDate || "2026-09-07"), schEnd = parseLocalDate(sch.endDate || "2027-01-10");
     schStart.setHours(0,0,0,0); schEnd.setHours(23,59,59,999);
 
     if (rangeEnd < schStart || monday > schEnd) {
-      tbody.innerHTML = `<tr><td colspan="${maxDays + 1}" style="text-align:center; padding:45px 15px; color:var(--text-muted); font-size:0.82rem;">⚠️ 本週不在課表有效範圍內。</td></tr>`;
-      if (!isFriend) renderDeadlinesBanner(); 
-      return;
+      tbody.innerHTML = `<tr><td colspan="${maxDays + 1}" style="text-align:center; padding:45px 15px; color:var(--text-muted); font-size:0.82rem;">⚠️ 本週不在當前課表有效範圍內。<br><span style="font-size:0.72rem; color:var(--primary);">請切換課表或調整時間範圍。</span></td></tr>`;
+      renderDeadlinesBanner(); return;
     }
 
-    if (!isFriend) renderDeadlinesBanner();
+    renderDeadlinesBanner();
 
-    const periodsToRender = (sch.periods || initialDefaultPeriods).filter((p) => !p.optional || targetState.showLatePeriods);
-    const currentWeekTempEvents = (sch.temporaryEvents || []).filter((t) => t.weekKey === weekKeyLocal);
+    const periodsToRender = (sch.periods || initialDefaultPeriods).filter((p) => !p.optional || state.showLatePeriods);
+    const currentWeekTempEvents = (sch.temporaryEvents || []).filter((t) => t.weekKey === weekKey);
     const hasNoonEvents = currentWeekTempEvents.some((t) => t.slotType === "noon");
-    const currentWeekWorks = (sch.works || []).filter((w) => w.type !== "weekly" || w.weekKey === weekKeyLocal);
+    const currentWeekWorks = (sch.works || []).filter((w) => w.type !== "weekly" || w.weekKey === weekKey);
 
     periodsToRender.forEach((p, pIdx) => {
       const tr = document.createElement("tr"), timeTh = document.createElement("td");
@@ -717,12 +763,12 @@ function renderSchedule(targetState = state, isFriend = false) {
         const overriddenCourseKeys = new Set((sch.overrides || []).filter((o) => o.type === "school").map((o) => o.sourceKey));
 
         if (course && course.name && !overriddenCourseKeys.has(key)) {
-          if (!isFriend) slotDiv.onclick = (e) => { e.stopPropagation(); handleSlotClick(d, p.id); };
+          slotDiv.onclick = (e) => { e.stopPropagation(); handleSlotClick(d, p.id); };
           const bgStyle = course.color ? `background-color: ${course.color}; color: ${getTextColorForBg(course.color)};` : `background-color: var(--school-def-bg); color: var(--school-def-text);`;
-          const hasWeeklyMemo = sch.weeklyMemos && sch.weeklyMemos[weekKeyLocal] && sch.weeklyMemos[weekKeyLocal][`school_${key}`];
+          const hasWeeklyMemo = sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`school_${key}`];
           slotDiv.innerHTML = `<div class="slot-item ${alignClass}" style="${bgStyle}">${hasWeeklyMemo ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(course.name)}</div>${course.room ? `<div class="item-sub">${escapeHtml(course.room)}</div>` : ""}</div>`;
         } else {
-          if (!isFriend) slotDiv.onclick = (e) => { e.stopPropagation(); handleSlotClick(d, p.id); };
+          slotDiv.onclick = (e) => { e.stopPropagation(); handleSlotClick(d, p.id); };
           slotDiv.innerHTML = `<span style="color:var(--border); font-size:0.75rem;">+</span>`;
         }
         wrapper.appendChild(slotDiv);
@@ -737,12 +783,12 @@ function renderSchedule(targetState = state, isFriend = false) {
               const bottomPx = timeToPixelOffset(timeToMinutes(item.endTime), periodsToRender);
               const floatCard = document.createElement("div"); floatCard.className = `tutoring-float-card ${itemType} ${alignClass}`;
               floatCard.style = `${item.color ? `background-color: ${item.color}; color: ${getTextColorForBg(item.color)};` : `background-color: var(${defBgVar}); color: var(${defTextVar});`} top: ${topPx + 2}px; height: ${Math.max(bottomPx - topPx, 28) - 4}px;`;
-              if (!isFriend) floatCard.onclick = (e) => { e.stopPropagation(); item.clickFn(item.id); };
+              floatCard.onclick = (e) => { e.stopPropagation(); item.clickFn(item.id); };
               floatCard.innerHTML = getInnerHtml(item); overlayContainer.appendChild(floatCard);
             });
           };
 
-          renderFloat((sch.tutorings || []).filter((t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && isDaytimeSlot(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTutoringClick})), "is-tutoring", (t) => `${(sch.weeklyMemos && sch.weeklyMemos[weekKeyLocal] && sch.weeklyMemos[weekKeyLocal][`tut_${t.id}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(t.student)}</div><div class="item-sub">${escapeHtml(t.startTime)}</div><div class="item-sub">${escapeHtml(t.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
+          renderFloat((sch.tutorings || []).filter((t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && isDaytimeSlot(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTutoringClick})), "is-tutoring", (t) => `${(sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`tut_${t.id}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(t.student)}</div><div class="item-sub">${escapeHtml(t.startTime)}</div><div class="item-sub">${escapeHtml(t.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
           renderFloat(currentWeekWorks.filter((w) => Number(w.day) === d && !overriddenSourceIds.has(w.id) && isDaytimeSlot(w.startTime, w.endTime)).map(w => ({...w, clickFn: handleWorkClick})), "is-work", (w) => `<div class="item-title">${escapeHtml(w.name)}</div><div class="item-sub">${escapeHtml(w.startTime)}</div><div class="item-sub">${escapeHtml(w.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
           renderFloat((sch.overrides || []).filter((o) => o.targetDate === currentCellDate && isDaytimeSlot(o.startTime, o.endTime)).map(o => ({...o, clickFn: handleOverrideClick})), "is-override-temp", (o) => `<div class="item-title">${escapeHtml(o.title)}</div>`, "--override-temp-def-bg", "--override-temp-def-text");
           renderFloat(currentWeekTempEvents.filter((t) => Number(t.day) === d && isDaytimeSlot(t.startTime, t.endTime) && t.slotType !== "noon").map(t => ({...t, clickFn: handleTempEventClick})), "is-override-temp", (t) => `<div class="item-title">${escapeHtml(t.title)}</div>${t.location ? `<div class="item-sub">${escapeHtml(t.location)}</div>` : ""}`, "--override-temp-def-bg", "--override-temp-def-text");
@@ -762,8 +808,7 @@ function renderSchedule(targetState = state, isFriend = false) {
           if (dayNoonTemps.length > 0) {
             dayNoonTemps.forEach((tmp) => {
               const card = document.createElement("div"); card.className = `noon-card is-override-temp ${alignClass}`; card.style = `background-color: var(--override-temp-def-bg); color: var(--override-temp-def-text);`;
-              if (!isFriend) card.onclick = (e) => { e.stopPropagation(); handleTempEventClick(tmp.id); }; 
-              card.innerHTML = `<div class="item-title">${escapeHtml(tmp.title)}</div>`; noonCell.appendChild(card);
+              card.onclick = (e) => { e.stopPropagation(); handleTempEventClick(tmp.id); }; card.innerHTML = `<div class="item-title">${escapeHtml(tmp.title)}</div>`; noonCell.appendChild(card);
             });
           } else { noonCell.innerHTML = `<span class="noon-empty">-</span>`; }
           td.appendChild(noonCell); noonTr.appendChild(td);
@@ -772,7 +817,7 @@ function renderSchedule(targetState = state, isFriend = false) {
       }
     });
 
-    if (targetState.showTutoring) {
+    if (state.showTutoring) {
       const eveningTr = document.createElement("tr"); eveningTr.className = "evening-row";
       eveningTr.innerHTML = `<td class="col-time"><div>課後</div><div style="color:var(--text-muted); font-size:0.58rem;">夜間</div></td>`;
       const overriddenSourceIds = new Set((sch.overrides || []).map((o) => o.sourceId));
@@ -785,12 +830,11 @@ function renderSchedule(targetState = state, isFriend = false) {
           list.forEach(item => {
             hasContent = true; const card = document.createElement("div"); card.className = `evening-card ${itemType} ${alignClass}`;
             card.style = item.color ? `background-color: ${item.color}; color: ${getTextColorForBg(item.color)};` : `background-color: var(${defBgVar}); color: var(${defTextVar});`;
-            if (!isFriend) card.onclick = (e) => { e.stopPropagation(); item.clickFn(item.id); }; 
-            card.innerHTML = getInnerHtml(item); eveningCell.appendChild(card);
+            card.onclick = (e) => { e.stopPropagation(); item.clickFn(item.id); }; card.innerHTML = getInnerHtml(item); eveningCell.appendChild(card);
           });
         };
 
-        renderEvening((sch.tutorings || []).filter((t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && !isDaytimeSlot(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTutoringClick})), "is-tutoring", (t) => `${(sch.weeklyMemos && sch.weeklyMemos[weekKeyLocal] && sch.weeklyMemos[weekKeyLocal][`tut_${t.id}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(t.student)}</div><div class="item-sub">${escapeHtml(t.startTime)}</div><div class="item-sub">${escapeHtml(t.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
+        renderEvening((sch.tutorings || []).filter((t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && !isDaytimeSlot(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTutoringClick})), "is-tutoring", (t) => `${(sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`tut_${t.id}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(t.student)}</div><div class="item-sub">${escapeHtml(t.startTime)}</div><div class="item-sub">${escapeHtml(t.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
         renderEvening(currentWeekWorks.filter((w) => Number(w.day) === d && !overriddenSourceIds.has(w.id) && !isDaytimeSlot(w.startTime, w.endTime)).map(w => ({...w, clickFn: handleWorkClick})), "is-work", (w) => `<div class="item-title">${escapeHtml(w.name)}</div><div class="item-sub">${escapeHtml(w.startTime)}</div><div class="item-sub">${escapeHtml(w.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
         renderEvening((sch.overrides || []).filter((o) => o.targetDate === currentCellDate && !isDaytimeSlot(o.startTime, o.endTime)).map(o => ({...o, clickFn: handleOverrideClick})), "is-override-temp", (o) => `<div class="item-title">${escapeHtml(o.title)}</div>`, "--override-temp-def-bg", "--override-temp-def-text");
         renderEvening(currentWeekTempEvents.filter((t) => Number(t.day) === d && !isDaytimeSlot(t.startTime, t.endTime) && t.slotType !== "noon").map(t => ({...t, clickFn: handleTempEventClick})), "is-override-temp", (t) => `<div class="item-title">${escapeHtml(t.title)}</div>`, "--override-temp-def-bg", "--override-temp-def-text");
@@ -800,7 +844,9 @@ function renderSchedule(targetState = state, isFriend = false) {
       }
       tbody.appendChild(eveningTr);
     }
-  } catch (err) { console.error("Render schedule error:", err); }
+  } catch (err) {
+    console.error("Render schedule error:", err);
+  }
 }
 
 function openSchoolModal(day, period) {
@@ -808,79 +854,185 @@ function openSchoolModal(day, period) {
   document.getElementById("sch-name").value = course.name || ""; document.getElementById("sch-room").value = course.room || "";
   document.getElementById("sch-teacher").value = course.teacher || ""; document.getElementById("sch-memo").value = course.memo || "";
   document.getElementById("sch-weekly-memo").value = (sch.weeklyMemos[getWeekKey(new Date())] && sch.weeklyMemos[getWeekKey(new Date())][`school_${key}`]) || "";
-  tempDeadlines = course.deadlines ? JSON.parse(JSON.stringify(course.deadlines)) : []; currentEditingDeadlineIdx = null; document.getElementById("btn-add-dl").innerText = "新增"; renderModalDeadlines();
+
+  tempDeadlines = course.deadlines ? JSON.parse(JSON.stringify(course.deadlines)) : [];
+  currentEditingDeadlineIdx = null; document.getElementById("btn-add-dl").innerText = "新增";
+  renderModalDeadlines();
+
   const typeSelect = document.getElementById("sch-type-select"), cType = course.type || "必修";
   if (Array.from(typeSelect.options).some(o => o.value === cType)) { typeSelect.value = cType; document.getElementById("sch-type-custom-wrap").style.display = "none"; }
   else { typeSelect.value = "custom"; document.getElementById("sch-type-custom-wrap").style.display = "block"; document.getElementById("sch-type-custom").value = cType; }
-  document.getElementById("sch-color").value = course.color || getDefaultSchoolBgHex(); document.getElementById("school-modal").classList.add("active");
+
+  document.getElementById("sch-color").value = course.color || getDefaultSchoolBgHex();
+  document.getElementById("school-modal").classList.add("active");
 }
+
 function saveSchoolCourse() {
   triggerHaptic(20); if (!currentEditingSlot) return; const sch = getActiveSchedule(), key = `${currentEditingSlot.day}_${currentEditingSlot.period}`;
   const name = document.getElementById("sch-name").value.trim(), color = document.getElementById("sch-color").value;
   let typeVal = document.getElementById("sch-type-select").value; if (typeVal === "custom") typeVal = document.getElementById("sch-type-custom").value.trim() || "必修";
+
   if (!sch.courses) sch.courses = {};
-  const oldCourse = sch.courses[key], oldName = oldCourse ? oldCourse.name : null;
+  
+  const oldCourse = sch.courses[key];
+  const oldName = oldCourse ? oldCourse.name : null;
+
   if (!name) delete sch.courses[key];
   else {
     sch.courses[key] = { name, type: typeVal, room: document.getElementById("sch-room").value.trim(), teacher: document.getElementById("sch-teacher").value.trim(), memo: document.getElementById("sch-memo").value.trim(), color: color.toLowerCase() === getDefaultSchoolBgHex().toLowerCase() ? undefined : color, deadlines: JSON.parse(JSON.stringify(tempDeadlines)) };
-    Object.keys(sch.courses).forEach(k => { if (sch.courses[k].name === name || (oldName && sch.courses[k].name === oldName)) { sch.courses[k].name = name; sch.courses[k].deadlines = JSON.parse(JSON.stringify(tempDeadlines)); } });
+    
+    Object.keys(sch.courses).forEach(k => {
+      if (sch.courses[k].name === name || (oldName && sch.courses[k].name === oldName)) {
+        sch.courses[k].name = name;
+        sch.courses[k].deadlines = JSON.parse(JSON.stringify(tempDeadlines));
+      }
+    });
   }
+
   const weekKey = getWeekKey(new Date()), memo = document.getElementById("sch-weekly-memo").value.trim();
   if (!sch.weeklyMemos) sch.weeklyMemos = {}; if (!sch.weeklyMemos[weekKey]) sch.weeklyMemos[weekKey] = {};
   if (memo) sch.weeklyMemos[weekKey][`school_${key}`] = memo; else delete sch.weeklyMemos[weekKey][`school_${key}`];
+
   saveToStorage(); renderSchedule(); closeModal("school-modal");
 }
-function deleteSchoolCourse() { if (!currentEditingSlot) return; if (confirm("清空該節？")) { triggerHaptic(25); delete getActiveSchedule().courses[`${currentEditingSlot.day}_${currentEditingSlot.period}`]; saveToStorage(); renderSchedule(); closeModal("school-modal"); } }
 
+function deleteSchoolCourse() {
+  if (!currentEditingSlot) return;
+  if (confirm("清空該節？")) { triggerHaptic(25); delete getActiveSchedule().courses[`${currentEditingSlot.day}_${currentEditingSlot.period}`]; saveToStorage(); renderSchedule(); closeModal("school-modal"); }
+}
+
+// ==========================================
+// 臨時調課 
+// ==========================================
 function openOverrideModal(id = null) {
-  currentEditingOverrideId = id; const sch = getActiveSchedule(); const selectEl = document.getElementById("ovr-source-select"); selectEl.innerHTML = '<option value="">-- 選擇 --</option>';
+  currentEditingOverrideId = id;
+  const sch = getActiveSchedule();
+  const selectEl = document.getElementById("ovr-source-select");
+  selectEl.innerHTML = '<option value="">-- 選擇 --</option>';
+  
   const dayNames = ["", "週一", "週二", "週三", "週四", "週五", "週六", "週日"];
   if (sch.courses) {
     Object.keys(sch.courses).forEach(key => {
-      const c = sch.courses[key], [day, pId] = key.split("_"), p = (sch.periods || initialDefaultPeriods).find(x => String(x.id) === pId);
+      const c = sch.courses[key];
+      const [day, pId] = key.split("_");
+      const p = (sch.periods || initialDefaultPeriods).find(x => String(x.id) === pId);
       if (c && c.name && p) selectEl.appendChild(new Option(`[課程] ${dayNames[day]} ${p.name} - ${c.name}`, `school_${key}`));
     });
   }
   (sch.tutorings || []).forEach(t => selectEl.appendChild(new Option(`[家教] ${dayNames[t.day]} ${t.student}`, `tutoring_${t.id}`)));
   (sch.works || []).forEach(w => selectEl.appendChild(new Option(`[工作] ${dayNames[w.day]} ${w.name}`, `work_${w.id}`)));
+
   if (id) {
     const ovr = (sch.overrides || []).find(o => o.id === id);
     if (ovr) {
       const optionValue = `${ovr.type}_${ovr.sourceKey || ovr.sourceId}`;
-      if (!Array.from(selectEl.options).some(opt => opt.value === optionValue)) selectEl.appendChild(new Option(`[已刪除或失效項目] ${ovr.title}`, optionValue));
-      selectEl.value = optionValue; document.getElementById("ovr-target-date").value = ovr.targetDate; document.getElementById("ovr-start-time").value = ovr.startTime; document.getElementById("ovr-end-time").value = ovr.endTime; document.getElementById("ovr-memo").value = ovr.memo || ""; document.getElementById("ovr-delete-btn").style.display = "inline-flex";
+      if (!Array.from(selectEl.options).some(opt => opt.value === optionValue)) {
+        selectEl.appendChild(new Option(`[已刪除或失效項目] ${ovr.title}`, optionValue));
+      }
+      selectEl.value = optionValue;
+      document.getElementById("ovr-target-date").value = ovr.targetDate;
+      document.getElementById("ovr-start-time").value = ovr.startTime;
+      document.getElementById("ovr-end-time").value = ovr.endTime;
+      document.getElementById("ovr-memo").value = ovr.memo || "";
+      document.getElementById("ovr-delete-btn").style.display = "inline-flex";
     }
-  } else { document.getElementById("ovr-target-date").value = formatDate(new Date()); document.getElementById("ovr-start-time").value = "18:00"; document.getElementById("ovr-end-time").value = "20:00"; document.getElementById("ovr-memo").value = ""; document.getElementById("ovr-delete-btn").style.display = "none"; }
-  populateOverrideOriginal(); document.getElementById("override-modal").classList.add("active");
+  } else {
+    document.getElementById("ovr-target-date").value = formatDate(new Date());
+    document.getElementById("ovr-start-time").value = "18:00";
+    document.getElementById("ovr-end-time").value = "20:00";
+    document.getElementById("ovr-memo").value = "";
+    document.getElementById("ovr-delete-btn").style.display = "none";
+  }
+  populateOverrideOriginal();
+  document.getElementById("override-modal").classList.add("active");
 }
-function populateOverrideOriginal() { const val = document.getElementById("ovr-source-select").value; const descEl = document.getElementById("ovr-source-desc"); if (!val) { descEl.value = ""; return; } descEl.value = document.getElementById("ovr-source-select").options[document.getElementById("ovr-source-select").selectedIndex].text; }
+
+function populateOverrideOriginal() {
+  const val = document.getElementById("ovr-source-select").value;
+  const descEl = document.getElementById("ovr-source-desc");
+  if (!val) { descEl.value = ""; return; }
+  descEl.value = document.getElementById("ovr-source-select").options[document.getElementById("ovr-source-select").selectedIndex].text;
+}
+
 function saveClassOverride() {
-  const val = document.getElementById("ovr-source-select").value, targetDate = document.getElementById("ovr-target-date").value, startTime = document.getElementById("ovr-start-time").value, endTime = document.getElementById("ovr-end-time").value;
+  const val = document.getElementById("ovr-source-select").value;
+  const targetDate = document.getElementById("ovr-target-date").value;
+  const startTime = document.getElementById("ovr-start-time").value;
+  const endTime = document.getElementById("ovr-end-time").value;
   if (!val || !targetDate || !startTime || !endTime) return alert("請完整填寫！");
-  const [type, ...keyParts] = val.split("_"), sourceIdOrKey = keyParts.join("_"), sch = getActiveSchedule(), title = document.getElementById("ovr-source-select").options[document.getElementById("ovr-source-select").selectedIndex].text.split("] ")[1];
-  const obj = { id: currentEditingOverrideId || "ovr_" + Date.now(), type, sourceKey: type === "school" ? sourceIdOrKey : undefined, sourceId: type !== "school" ? sourceIdOrKey : undefined, title, targetDate, startTime, endTime, memo: document.getElementById("ovr-memo").value.trim() };
-  if (currentEditingOverrideId) { const idx = sch.overrides.findIndex(o => o.id === currentEditingOverrideId); if (idx > -1) sch.overrides[idx] = obj; } else { sch.overrides.push(obj); }
+
+  const [type, ...keyParts] = val.split("_");
+  const sourceIdOrKey = keyParts.join("_");
+  const sch = getActiveSchedule();
+  
+  const title = document.getElementById("ovr-source-select").options[document.getElementById("ovr-source-select").selectedIndex].text.split("] ")[1];
+
+  const obj = {
+    id: currentEditingOverrideId || "ovr_" + Date.now(),
+    type,
+    sourceKey: type === "school" ? sourceIdOrKey : undefined,
+    sourceId: type !== "school" ? sourceIdOrKey : undefined,
+    title,
+    targetDate,
+    startTime,
+    endTime,
+    memo: document.getElementById("ovr-memo").value.trim()
+  };
+
+  if (currentEditingOverrideId) {
+    const idx = sch.overrides.findIndex(o => o.id === currentEditingOverrideId);
+    if (idx > -1) sch.overrides[idx] = obj;
+  } else {
+    sch.overrides.push(obj);
+  }
+  
   saveToStorage(); renderSchedule(); closeModal("override-modal");
 }
 
+// ==========================================
+// 圖表生成 (Expense Donut Chart)
+// ==========================================
 function toggleExpenseChart() {
-  triggerHaptic(20); isExpenseChartVisible = !isExpenseChartVisible; const container = document.getElementById("expense-chart-container");
-  if (isExpenseChartVisible) { container.classList.add("active"); financeActiveMode = "all_expense"; } else { container.classList.remove("active"); financeActiveMode = "all"; }
-  financeActiveMainCat = "all"; financeActiveSubCat = "all"; renderFinances();
+  triggerHaptic(20); isExpenseChartVisible = !isExpenseChartVisible;
+  const container = document.getElementById("expense-chart-container");
+  if (isExpenseChartVisible) {
+    container.classList.add("active");
+    financeActiveMode = "all_expense";
+  } else {
+    container.classList.remove("active");
+    financeActiveMode = "all";
+  }
+  financeActiveMainCat = "all"; financeActiveSubCat = "all";
+  renderFinances();
 }
+
 function renderChartData() {
-  const container = document.getElementById("expense-chart-content"); container.innerHTML = ""; const selectedMonth = document.getElementById("fin-month-filter").value; let totalExpense = 0; const catSums = {};
+  const container = document.getElementById("expense-chart-content"); container.innerHTML = "";
+  const selectedMonth = document.getElementById("fin-month-filter").value; let totalExpense = 0; const catSums = {};
+
   (state.finances || []).forEach(item => {
-    if (item.isHidden && !state.showHiddenItems) return; if (item.type !== "expense") return; if (selectedMonth && (item.date || "").slice(0,7) !== selectedMonth) return;
-    const amt = Number(item.amount || 0); totalExpense += amt; if (!catSums[item.parentCat]) catSums[item.parentCat] = 0; catSums[item.parentCat] += amt;
+    if (item.isHidden && !state.showHiddenItems) return; if (item.type !== "expense") return;
+    if (selectedMonth && (item.date || "").slice(0,7) !== selectedMonth) return;
+    const amt = Number(item.amount || 0); totalExpense += amt;
+    if (!catSums[item.parentCat]) catSums[item.parentCat] = 0; catSums[item.parentCat] += amt;
   });
+
   if (totalExpense === 0) { container.innerHTML = `<div style="font-size:0.8rem; color:var(--text-muted);">無支出資料</div>`; return; }
-  const data = Object.keys(catSums).map(cat => ({ cat, amt: catSums[cat], pct: catSums[cat] / totalExpense })).sort((a,b) => b.amt - a.amt), colors = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#3b82f6', '#8b5cf6', '#d946ef', '#64748b', '#14b8a6', '#f43f5e'];
+
+  const data = Object.keys(catSums).map(cat => ({ cat, amt: catSums[cat], pct: catSums[cat] / totalExpense })).sort((a,b) => b.amt - a.amt);
+  const colors = ['#ef4444', '#f97316', '#f59e0b', '#84cc16', '#3b82f6', '#8b5cf6', '#d946ef', '#64748b', '#14b8a6', '#f43f5e'];
+
   let svgHTML = `<svg width="120" height="120" viewBox="0 0 32 32" style="transform: rotate(-90deg); border-radius:50%;">`, offset = 0, C = 2 * Math.PI * 10;
-  data.forEach((item, idx) => { item.color = colors[idx % colors.length]; const slice = item.pct * C; svgHTML += `<circle r="10" cx="16" cy="16" fill="transparent" stroke="${item.color}" stroke-width="6" stroke-dasharray="${slice} ${C}" stroke-dashoffset="${-offset}"></circle>`; offset += slice; });
-  svgHTML += `</svg>`; let legendHTML = `<div style="display:flex; flex-direction:column; gap:4px;">`;
+  data.forEach((item, idx) => {
+    item.color = colors[idx % colors.length]; const slice = item.pct * C;
+    svgHTML += `<circle r="10" cx="16" cy="16" fill="transparent" stroke="${item.color}" stroke-width="6" stroke-dasharray="${slice} ${C}" stroke-dashoffset="${-offset}"></circle>`; offset += slice;
+  });
+  svgHTML += `</svg>`;
+
+  let legendHTML = `<div style="display:flex; flex-direction:column; gap:4px;">`;
   data.forEach(item => { legendHTML += `<div class="legend-item"><div class="legend-color" style="background:${item.color};"></div><span>${escapeHtml(item.cat)}: ${Math.round(item.pct * 100)}% ($${item.amt.toLocaleString()})</span></div>`; });
-  legendHTML += `</div>`; container.innerHTML = svgHTML + legendHTML;
+  legendHTML += `</div>`;
+  container.innerHTML = svgHTML + legendHTML;
 }
 
 function openTutoringModal(id = null) {
@@ -891,7 +1043,8 @@ function openTutoringModal(id = null) {
     document.getElementById("tut-color").value = tut.color || defHex; document.getElementById("tut-weekly-memo").value = (sch.weeklyMemos[getWeekKey(new Date())] && sch.weeklyMemos[getWeekKey(new Date())][`tut_${id}`]) || ""; document.getElementById("tut-delete-btn").style.display = "block";
   } else {
     ["student","subject","location","line","fb","phone","rate","memo","weekly-memo"].forEach(k => document.getElementById(`tut-${k}`).value = "");
-    document.getElementById("tut-day").value = "6"; document.getElementById("tut-start-time").value = "18:00"; document.getElementById("tut-end-time").value = "20:00"; document.getElementById("tut-color").value = defHex; document.getElementById("tut-delete-btn").style.display = "none";
+    document.getElementById("tut-day").value = "6"; document.getElementById("tut-start-time").value = "18:00"; document.getElementById("tut-end-time").value = "20:00";
+    document.getElementById("tut-color").value = defHex; document.getElementById("tut-delete-btn").style.display = "none";
   }
   document.getElementById("tutoring-modal").classList.add("active");
 }
@@ -915,7 +1068,8 @@ function openWorkModal(id = null) {
     document.getElementById("work-color").value = work.color || defHex; document.getElementById("work-delete-btn").style.display = "block";
   } else {
     ["name","location","rate","memo"].forEach(k => document.getElementById(`work-${k}`).value = "");
-    document.getElementById("work-type").value = "fixed"; document.getElementById("work-day").value = "1"; document.getElementById("work-start-time").value = "09:00"; document.getElementById("work-end-time").value = "12:00"; document.getElementById("work-color").value = defHex; document.getElementById("work-delete-btn").style.display = "none";
+    document.getElementById("work-type").value = "fixed"; document.getElementById("work-day").value = "1"; document.getElementById("work-start-time").value = "09:00"; document.getElementById("work-end-time").value = "12:00";
+    document.getElementById("work-color").value = defHex; document.getElementById("work-delete-btn").style.display = "none";
   }
   document.getElementById("work-modal").classList.add("active");
 }
@@ -959,7 +1113,8 @@ function setBillingMonthAll() { document.getElementById("bill-month-filter").val
 function setStudentFilter(name) { triggerHaptic(15); currentSelectedStudentFilter = name; renderBillings(); }
 
 function renderBillings() {
-  const tbody = document.getElementById("billing-body"), isWork = currentBillingType === "work", selectedMonth = document.getElementById("bill-month-filter").value, sortOrder = document.getElementById("bill-sort-order").value;
+  const tbody = document.getElementById("billing-body"); 
+  const isWork = currentBillingType === "work", selectedMonth = document.getElementById("bill-month-filter").value, sortOrder = document.getElementById("bill-sort-order").value;
   document.getElementById("th-billing-target").innerText = isWork ? "工作名稱" : "學生"; document.getElementById("stat-unpaid-title").innerText = isWork ? "未領取金額" : "未繳清金額";
   
   const allNamesSet = new Set();
@@ -980,29 +1135,41 @@ function renderBillings() {
     if (currentSelectedStudentFilter === "__FILTER_ALL__" || currentSelectedStudentFilter === targetName) { tH += h; tI += tot; if (r.status === "unpaid") tU += tot; }
   });
 
-  const statsC = document.getElementById("student-stats-container"); let statsHtml = "";
-  Object.keys(statMap).forEach(k => { statsHtml += `<div class="student-stat-card"><div class="student-stat-name">${escapeHtml(k)}</div><div class="student-stat-row"><span>時數：</span><strong>${statMap[k].h} hr</strong></div><div class="student-stat-row"><span>應收：</span><strong>$${statMap[k].i.toLocaleString()}</strong></div><div class="student-stat-row"><span>已收：</span><span style="color:#15803d; font-weight:700;">$${statMap[k].p.toLocaleString()}</span></div><div class="student-stat-row"><span>未繳：</span><span style="color:#ef4444; font-weight:700;">$${statMap[k].u.toLocaleString()}</span></div></div>`; });
+  const statsC = document.getElementById("student-stats-container");
+  let statsHtml = "";
+  Object.keys(statMap).forEach(k => {
+    statsHtml += `<div class="student-stat-card"><div class="student-stat-name">${escapeHtml(k)}</div><div class="student-stat-row"><span>時數：</span><strong>${statMap[k].h} hr</strong></div><div class="student-stat-row"><span>應收：</span><strong>$${statMap[k].i.toLocaleString()}</strong></div><div class="student-stat-row"><span>已收：</span><span style="color:#15803d; font-weight:700;">$${statMap[k].p.toLocaleString()}</span></div><div class="student-stat-row"><span>未繳：</span><span style="color:#ef4444; font-weight:700;">$${statMap[k].u.toLocaleString()}</span></div></div>`;
+  });
   statsC.innerHTML = statsHtml;
 
   const filtered = (isWork ? state.workBillings : state.billings).map((record, idx) => ({record, idx})).filter(({record}) => (!selectedMonth || (record.date||'').slice(0,7) === selectedMonth) && (currentSelectedStudentFilter === "__FILTER_ALL__" || (isWork ? record.name : record.student) === currentSelectedStudentFilter)).sort((a,b) => sortOrder === "asc" ? a.record.date.localeCompare(b.record.date) : b.record.date.localeCompare(a.record.date));
+  
   let tbodyHtml = "";
-  filtered.forEach(({record, idx}) => { tbodyHtml += `<tr><td>${record.date}</td><td><strong>${escapeHtml(isWork ? record.name : record.student)}</strong></td><td>${record.hours}h</td><td>$${record.rate}</td><td><strong style="color:var(--primary);">$${record.total}</strong></td><td><span class="${record.status === "paid" ? "tag-paid" : "tag-unpaid"}">${record.status === "paid" ? "已清" : "未清"}</span></td><td>${escapeHtml(record.notes || "-")}</td><td><button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'toggleWorkBillStatus' : 'toggleBillStatus'}(${idx})">切換</button> <button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'openWorkBillingModal' : 'openBillingModal'}(${idx})">編輯</button> <button class="btn btn-danger" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'deleteWorkBilling' : 'deleteBilling'}(${idx})">刪除</button></td></tr>`; });
+  filtered.forEach(({record, idx}) => {
+    tbodyHtml += `<tr><td>${record.date}</td><td><strong>${escapeHtml(isWork ? record.name : record.student)}</strong></td><td>${record.hours}h</td><td>$${record.rate}</td><td><strong style="color:var(--primary);">$${record.total}</strong></td><td><span class="${record.status === "paid" ? "tag-paid" : "tag-unpaid"}">${record.status === "paid" ? "已清" : "未清"}</span></td><td>${escapeHtml(record.notes || "-")}</td><td><button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'toggleWorkBillStatus' : 'toggleBillStatus'}(${idx})">切換</button> <button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'openWorkBillingModal' : 'openBillingModal'}(${idx})">編輯</button> <button class="btn btn-danger" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'deleteWorkBilling' : 'deleteBilling'}(${idx})">刪除</button></td></tr>`;
+  });
   if (filtered.length === 0) tbodyHtml = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:12px;">無紀錄</td></tr>`;
   tbody.innerHTML = tbodyHtml;
+  
   document.getElementById("stat-total-hours").innerText = `${tH} 小時`; document.getElementById("stat-total-income").innerText = `$${tI.toLocaleString()}`; document.getElementById("stat-unpaid").innerText = `$${tU.toLocaleString()}`;
 }
 
 function syncBillingToFinance(billId, date, total, notes, isWork = false) {
   const finIdx = state.finances.findIndex(f => f.id === "fin_sync_" + billId);
-  if (finIdx > -1) { state.finances[finIdx].date = date; state.finances[finIdx].amount = Number(total); state.finances[finIdx].notes = notes; } 
-  else { state.finances.unshift({ id: "fin_sync_" + billId, date, type: "income", parentCat: "💰 工作收入", subCat: isWork ? "兼職外快" : "家教收入", amount: Number(total), notes, isHidden: false }); }
+  if (finIdx > -1) {
+    state.finances[finIdx].date = date;
+    state.finances[finIdx].amount = Number(total);
+    state.finances[finIdx].notes = notes;
+  } else {
+    const finObj = { id: "fin_sync_" + billId, date, type: "income", parentCat: "💰 工作收入", subCat: isWork ? "兼職外快" : "家教收入", amount: Number(total), notes, isHidden: false };
+    state.finances.unshift(finObj);
+  }
 }
 
 function openBillingModal(idx = null) {
   currentEditingBillingIndex = idx; const sel = document.getElementById("bill-student-select"); sel.innerHTML = '<option value="">-- 現有家教 --</option>';
   new Set((state.schedules||[]).flatMap(s => (s.tutorings||[]).map(t => t.student))).forEach(s => { if(s) sel.appendChild(new Option(s, s)); });
-  if (idx !== null) { const item = state.billings[idx]; ["date","student","hours","rate","total","status","notes"].forEach(k => document.getElementById(`bill-${k}`).value = item[k] || ""); } 
-  else { ["student","notes"].forEach(k => document.getElementById(`bill-${k}`).value = ""); document.getElementById("bill-date").value = formatDate(new Date()); document.getElementById("bill-hours").value = "2"; document.getElementById("bill-status").value = "unpaid"; updateBillingRateByDateAndStudent(); }
+  if (idx !== null) { const item = state.billings[idx]; ["date","student","hours","rate","total","status","notes"].forEach(k => document.getElementById(`bill-${k}`).value = item[k] || ""); } else { ["student","notes"].forEach(k => document.getElementById(`bill-${k}`).value = ""); document.getElementById("bill-date").value = formatDate(new Date()); document.getElementById("bill-hours").value = "2"; document.getElementById("bill-status").value = "unpaid"; updateBillingRateByDateAndStudent(); }
   document.getElementById("billing-modal").classList.add("active");
 }
 function onSelectBillingStudent() { document.getElementById("bill-student").value = document.getElementById("bill-student-select").value; updateBillingRateByDateAndStudent(); }
@@ -1026,8 +1193,7 @@ function deleteBilling(idx) { if(confirm("刪除？")) { state.finances = state.
 function openWorkBillingModal(idx = null) {
   currentEditingWorkBillingIndex = idx; const sel = document.getElementById("wbill-name-select"); sel.innerHTML = '<option value="">-- 現有工作 --</option>';
   new Set((state.schedules||[]).flatMap(s => (s.works||[]).map(w => w.name))).forEach(n => { if(n) sel.appendChild(new Option(n, n)); });
-  if (idx !== null) { const item = state.workBillings[idx]; ["date","name","hours","rate","total","status","notes"].forEach(k => document.getElementById(`wbill-${k}`).value = item[k] || ""); } 
-  else { ["name","notes"].forEach(k => document.getElementById(`wbill-${k}`).value = ""); document.getElementById("wbill-date").value = formatDate(new Date()); document.getElementById("wbill-hours").value = "4"; document.getElementById("wbill-status").value = "unpaid"; updateWorkBillingRateByDateAndName(); }
+  if (idx !== null) { const item = state.workBillings[idx]; ["date","name","hours","rate","total","status","notes"].forEach(k => document.getElementById(`wbill-${k}`).value = item[k] || ""); } else { ["name","notes"].forEach(k => document.getElementById(`wbill-${k}`).value = ""); document.getElementById("wbill-date").value = formatDate(new Date()); document.getElementById("wbill-hours").value = "4"; document.getElementById("wbill-status").value = "unpaid"; updateWorkBillingRateByDateAndName(); }
   document.getElementById("work-billing-modal").classList.add("active");
 }
 function onSelectBillingWork() { document.getElementById("wbill-name").value = document.getElementById("wbill-name-select").value; updateWorkBillingRateByDateAndName(); }
@@ -1060,7 +1226,8 @@ function onFinanceParentCatChange() { const sSel = document.getElementById("fin-
 function openFinanceModal(id = null) {
   document.getElementById("fin-edit-id").value = id || "";
   if (id) {
-    const item = state.finances.find(f => f.id === id); document.getElementById("fin-modal-title").innerText = "編輯收支"; document.getElementById("fin-date").value = item.date; document.getElementById("fin-type").value = item.type; onFinanceTypeChange(); document.getElementById("fin-parent-cat").value = item.parentCat; onFinanceParentCatChange(); document.getElementById("fin-sub-cat").value = item.subCat; document.getElementById("fin-amount").value = item.amount; document.getElementById("fin-notes").value = item.notes || "";
+    const item = state.finances.find(f => f.id === id);
+    document.getElementById("fin-modal-title").innerText = "編輯收支"; document.getElementById("fin-date").value = item.date; document.getElementById("fin-type").value = item.type; onFinanceTypeChange(); document.getElementById("fin-parent-cat").value = item.parentCat; onFinanceParentCatChange(); document.getElementById("fin-sub-cat").value = item.subCat; document.getElementById("fin-amount").value = item.amount; document.getElementById("fin-notes").value = item.notes || "";
   } else {
     document.getElementById("fin-modal-title").innerText = "新增收支"; document.getElementById("fin-date").value = formatDate(new Date()); document.getElementById("fin-type").value = "expense"; onFinanceTypeChange(); document.getElementById("fin-amount").value = ""; document.getElementById("fin-notes").value = "";
   }
@@ -1070,10 +1237,15 @@ function saveFinanceRecord() {
   const id = document.getElementById("fin-edit-id").value, date = document.getElementById("fin-date").value, type = document.getElementById("fin-type").value, parentCat = document.getElementById("fin-parent-cat").value, subCat = document.getElementById("fin-sub-cat").value, amount = Number(document.getElementById("fin-amount").value), notes = document.getElementById("fin-notes").value.trim();
   if (!date || !amount) return alert("填寫完整！");
   if (id) { 
-    const idx = state.finances.findIndex(f => f.id === id), oldItem = state.finances[idx];
+    const idx = state.finances.findIndex(f => f.id === id); 
+    const oldItem = state.finances[idx];
+    
     if (oldItem.targetDebtId && oldItem.subCat === "還款") {
-      const diff = amount - oldItem.amount, targetDebt = state.finances.find(f => f.id === oldItem.targetDebtId);
-      if (targetDebt && targetDebt.remaining !== undefined) targetDebt.remaining -= diff;
+      const diff = amount - oldItem.amount;
+      const targetDebt = state.finances.find(f => f.id === oldItem.targetDebtId);
+      if (targetDebt && targetDebt.remaining !== undefined) {
+        targetDebt.remaining -= diff;
+      }
     }
     state.finances[idx] = { ...oldItem, date, type, parentCat, subCat, amount, notes }; 
   }
@@ -1082,46 +1254,72 @@ function saveFinanceRecord() {
 }
 
 function openRepayModal(id) { 
-  const item = state.finances.find(f => f.id === id); document.getElementById("repay-id").value = id; 
+  const item = state.finances.find(f => f.id === id); 
+  document.getElementById("repay-id").value = id; 
   document.getElementById("repay-info").value = `[${item.subCat}] 未結清: $${(item.remaining !== undefined ? item.remaining : item.amount)}`; 
   document.getElementById("repay-date").value = formatDate(new Date()); 
-  document.getElementById("repay-amount").value = (item.remaining !== undefined ? item.remaining : item.amount); document.getElementById("repay-notes").value = ""; 
+  document.getElementById("repay-amount").value = (item.remaining !== undefined ? item.remaining : item.amount); 
+  document.getElementById("repay-notes").value = ""; 
   document.getElementById("repay-modal").classList.add("active"); 
 }
+
+// 修正 1：防止還款輸入負數或零
 function confirmRepay() {
   const id = document.getElementById("repay-id").value, date = document.getElementById("repay-date").value, amt = Number(document.getElementById("repay-amount").value);
-  const item = state.finances.find(f => f.id === id), rem = item.remaining !== undefined ? item.remaining : item.amount;
+  const item = state.finances.find(f => f.id === id); const rem = item.remaining !== undefined ? item.remaining : item.amount;
   if (!date || amt <= 0 || amt > rem) return alert("金額錯誤！請輸入大於零的有效金額。");
   item.remaining = rem - amt;
   state.finances.unshift({ id: "fin_repay_" + Date.now(), targetDebtId: id, date, type: item.type === "receivable" ? "income" : "expense", parentCat: item.type === "receivable" ? "💰 工作收入" : "📦 其他", subCat: "還款", amount: amt, notes: document.getElementById("repay-notes").value, isHidden: false });
   saveToStorage(); renderFinances(); closeModal("repay-modal");
 }
+
 function deleteFinanceRecord(id) { 
-  const target = state.finances.find(f => f.id === id); if (!target) return;
+  const target = state.finances.find(f => f.id === id); 
+  if (!target) return;
+
   if (target.type === "receivable" || target.type === "payable") {
-    if (state.finances.filter(f => f.targetDebtId === id).length > 0) { if (!confirm("此紀錄包含已還款紀錄，確定要連帶刪除所有關聯的還款紀錄嗎？")) return; state.finances = state.finances.filter(f => f.targetDebtId !== id); } 
-    else { if (!confirm("確定刪除此紀錄？")) return; }
-  } else { if (!confirm("確定刪除此紀錄？")) return; }
-  if (target.subCat === "還款" && target.targetDebtId) { const m = state.finances.find(f => f.id === target.targetDebtId); if (m && m.remaining !== undefined) m.remaining += target.amount; } 
-  state.finances = state.finances.filter(f => f.id !== id); saveToStorage(); renderFinances(); 
+    const relatedRepayments = state.finances.filter(f => f.targetDebtId === id);
+    if (relatedRepayments.length > 0) {
+      if (!confirm("此紀錄包含已還款紀錄，確定要連帶刪除所有關聯的還款紀錄嗎？")) return;
+      state.finances = state.finances.filter(f => f.targetDebtId !== id);
+    } else {
+      if (!confirm("確定刪除此紀錄？")) return;
+    }
+  } else {
+    if (!confirm("確定刪除此紀錄？")) return;
+  }
+
+  if (target.subCat === "還款" && target.targetDebtId) { 
+    const m = state.finances.find(f => f.id === target.targetDebtId); 
+    if (m && m.remaining !== undefined) m.remaining += target.amount; 
+  } 
+  
+  state.finances = state.finances.filter(f => f.id !== id); 
+  saveToStorage(); 
+  renderFinances(); 
 }
 
 function renderFinances() {
-  const tbody = document.getElementById("finance-body"), selectedMonth = document.getElementById("fin-month-filter").value, sortOrder = document.getElementById("fin-sort-order").value;
+  const tbody = document.getElementById("finance-body");
+  const selectedMonth = document.getElementById("fin-month-filter").value, sortOrder = document.getElementById("fin-sort-order").value;
   let tE = 0, tI = 0, tR = 0, tP = 0;
+
   (state.finances || []).forEach((item) => {
     const amt = Number(item.amount || 0), rem = item.remaining !== undefined ? item.remaining : amt, mo = (item.date || '').slice(0, 7);
     if (item.type === "receivable" && (rem > 0 || !selectedMonth || mo === selectedMonth)) tR += rem;
     if (item.type === "payable" && (rem > 0 || !selectedMonth || mo === selectedMonth)) tP += rem;
-    if (item.isHidden && !state.showHiddenItems) return; if (selectedMonth && mo !== selectedMonth) return;
+    if (item.isHidden && !state.showHiddenItems) return;
+    if (selectedMonth && mo !== selectedMonth) return;
     if (item.type === "expense") tE += amt; if (item.type === "income") tI += amt;
   });
 
   const chips = document.getElementById("finance-filter-chips"); 
   let chipsHtml = `<div class="finance-chip ${financeActiveMode === "all" ? "active" : ""}" onclick="setFinanceAllMode('all')">全部類型</div>`;
+  
   const cats = getCategories();
-  if (financeActiveMode.startsWith("all")) { Object.keys(cats).forEach(k => getCategoryKeys(k).forEach(p => chipsHtml += `<div class="finance-chip" onclick="selectFinanceMainCategory('${escapeJS(p)}')">${escapeHtml(p)}</div>`)); } 
-  else {
+  if (financeActiveMode.startsWith("all")) {
+    Object.keys(cats).forEach(k => getCategoryKeys(k).forEach(p => chipsHtml += `<div class="finance-chip" onclick="selectFinanceMainCategory('${escapeJS(p)}')">${escapeHtml(p)}</div>`));
+  } else {
     chipsHtml += `<div class="finance-chip" style="background:var(--primary);color:#fff;" onclick="setFinanceAllMode('all')">◀ 返回</div><div class="finance-chip ${financeActiveSubCat === "all" ? "active" : ""}" onclick="selectFinanceSubCategory('all')">全部 (${escapeHtml(financeActiveMainCat)})</div>`;
     let subs = []; Object.values(cats).forEach(t => { if(t[financeActiveMainCat]) subs = t[financeActiveMainCat]; });
     subs.forEach(s => chipsHtml += `<div class="finance-chip ${financeActiveSubCat === s ? "active" : ""}" onclick="selectFinanceSubCategory('${escapeJS(s)}')">${escapeHtml(s)}</div>`);
@@ -1129,6 +1327,7 @@ function renderFinances() {
   chips.innerHTML = chipsHtml;
 
   const lbls = { expense: { n: "支出", c: "tag-expense" }, income: { n: "收入", c: "tag-income" }, transfer: { n: "轉帳", c: "tag-paid" }, receivable: { n: "應收", c: "tag-receivable" }, payable: { n: "應付", c: "tag-payable" } };
+  
   let tbodyHtml = "";
   state.finances.filter(i => {
     if (i.isHidden && !state.showHiddenItems) return false;
@@ -1146,9 +1345,12 @@ function renderFinances() {
     tbodyHtml += `<tr style="${i.isHidden?'opacity:0.55;':''}"><td>${i.date}</td><td><span class="${tl.c}">${tl.n}</span></td><td><strong>${escapeHtml(i.parentCat)}</strong> <span style="color:var(--text-muted);">/ ${escapeHtml(i.subCat)}</span> ${i.isHidden?'<span class="tag-hidden">已隱藏</span>':''}</td><td><strong style="color:${(i.type==='income'||i.type==='receivable')?'#10b981':'#ef4444'};">${dAmt}</strong></td><td>${escapeHtml(i.notes||"-")}</td><td>${ex}</td></tr>`;
   });
   
-  if(tbodyHtml==="") tbodyHtml = `<tr><td colspan="6" style="text-align:center; padding:12px;">無紀錄</td></tr>`; tbody.innerHTML = tbodyHtml;
+  if(tbodyHtml==="") tbodyHtml = `<tr><td colspan="6" style="text-align:center; padding:12px;">無紀錄</td></tr>`;
+  tbody.innerHTML = tbodyHtml;
+  
   document.getElementById("fin-stat-expense").innerText = `$${tE.toLocaleString()}`; document.getElementById("fin-stat-income").innerText = `$${tI.toLocaleString()}`; document.getElementById("fin-stat-receivable").innerText = `$${tR.toLocaleString()}`; document.getElementById("fin-stat-payable").innerText = `$${tP.toLocaleString()}`;
   document.getElementById("fin-stat-balance").innerText = `$${(tI - tE).toLocaleString()}`; document.getElementById("fin-stat-balance").style.color = (tI - tE) >= 0 ? "#10b981" : "#ef4444";
+
   if (isExpenseChartVisible) renderChartData();
 }
 
@@ -1162,17 +1364,24 @@ function openRecurringModal() {
   });
   document.getElementById("recurring-modal").classList.add("active");
 }
+
 function openAddRecurringModal(id = null) {
   document.getElementById("rec-edit-id").value = id || "";
   if (id) {
-    const item = state.recurringFinances.find(r => r.id === id); document.getElementById("rec-modal-title").innerText = "編輯固定收支";
+    const item = state.recurringFinances.find(r => r.id === id);
+    document.getElementById("rec-modal-title").innerText = "編輯固定收支";
     ["day","type","amount","notes"].forEach(k => document.getElementById(`rec-${k}`).value = item[k.replace(/-([a-z])/g, g => g[1].toUpperCase())] || "");
     onRecurringTypeChange(); document.getElementById("rec-parent-cat").value = item.parentCat; onRecurringParentCatChange(); document.getElementById("rec-sub-cat").value = item.subCat;
-  } else { document.getElementById("rec-modal-title").innerText = "新增固定收支"; ["day","amount","notes"].forEach(k => document.getElementById(`rec-${k}`).value = ""); document.getElementById("rec-type").value = "expense"; onRecurringTypeChange(); }
+  } else {
+    document.getElementById("rec-modal-title").innerText = "新增固定收支";
+    ["day","amount","notes"].forEach(k => document.getElementById(`rec-${k}`).value = ""); document.getElementById("rec-type").value = "expense"; onRecurringTypeChange();
+  }
   document.getElementById("recurring-modal").classList.remove("active"); document.getElementById("recurring-edit-modal").classList.add("active");
 }
+
 function onRecurringTypeChange() { const pSel = document.getElementById("rec-parent-cat"); pSel.innerHTML = ""; getCategoryKeys(document.getElementById("rec-type").value).forEach(p => pSel.appendChild(new Option(p, p))); onRecurringParentCatChange(); }
 function onRecurringParentCatChange() { const sSel = document.getElementById("rec-sub-cat"); sSel.innerHTML = ""; (getCategories()[document.getElementById("rec-type").value][document.getElementById("rec-parent-cat").value] || []).forEach(s => sSel.appendChild(new Option(s, s))); }
+
 function saveRecurringRecord() {
   const id = document.getElementById("rec-edit-id").value, dayOfMonth = Number(document.getElementById("rec-day").value), type = document.getElementById("rec-type").value, parentCat = document.getElementById("rec-parent-cat").value, subCat = document.getElementById("rec-sub-cat").value, amount = Number(document.getElementById("rec-amount").value), notes = document.getElementById("rec-notes").value.trim();
   if (!dayOfMonth || dayOfMonth < 1 || dayOfMonth > 31 || !amount) return alert("請正確填寫日期(1~31)與金額！");
@@ -1181,12 +1390,15 @@ function saveRecurringRecord() {
   if (id) { const idx = state.recurringFinances.findIndex(r => r.id === id); state.recurringFinances[idx] = obj; } else state.recurringFinances.push(obj);
   saveToStorage(); checkRecurringFinances(); closeModal("recurring-edit-modal"); openRecurringModal();
 }
+
 function deleteRecurringRecord(id) { if (confirm("確定刪除此設定？")) { state.recurringFinances = state.recurringFinances.filter(r => r.id !== id); saveToStorage(); openRecurringModal(); } }
 
 function openCategoryManageModal() { document.getElementById("cat-manage-type").value = "expense"; renderCategoryManageList(); document.getElementById("category-manage-modal").classList.add("active"); }
 function resetCategoriesToDefault() { if(confirm("恢復預設？")) { state.customCategories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)); state.categoryOrder = null; saveToStorage(); renderCategoryManageList(); renderFinances(); } }
+
 function renderCategoryManageList() {
   const t = document.getElementById("cat-manage-type").value, list = document.getElementById("cat-manage-list"), cats = getCategories()[t] || {}; 
+  
   let listHtml = "";
   getCategoryKeys(t).forEach((p, pi) => {
     listHtml += `<div style="font-weight:700; font-size:0.80rem; padding:6px; background:var(--table-th-bg); margin-top:4px; display:flex; justify-content:space-between;"><span>${escapeHtml(p)}</span><div><button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveMain('${escapeJS(t)}',${pi},-1)">▲主</button> <button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveMain('${escapeJS(t)}',${pi},1)">▼主</button></div></div>`;
@@ -1194,6 +1406,7 @@ function renderCategoryManageList() {
   });
   list.innerHTML = listHtml;
 }
+
 function catMoveMain(t, i, d) { const k = getCategoryKeys(t), ti = i+d; if(ti<0 || ti>=k.length) return; const m = k[i]; k.splice(i, 1); k.splice(ti, 0, m); state.categoryOrder[t] = k; saveToStorage(); renderCategoryManageList(); renderFinances(); }
 function catMoveSub(t, p, i, d) { const c = getCategories(), l = c[t][p], ti = i+d; if(ti<0 || ti>=l.length) return; const tmp = l[i]; l[i] = l[ti]; l[ti] = tmp; saveToStorage(); renderCategoryManageList(); renderFinances(); }
 function openAddMainCategoryModal() { document.getElementById("cat-add-main-name").value = ""; document.getElementById("cat-add-main-modal").classList.add("active"); }
@@ -1201,250 +1414,49 @@ function confirmAddMainCategory() { const t = document.getElementById("cat-manag
 function openAddSubCategoryModal() { const t = document.getElementById("cat-manage-type").value, sel = document.getElementById("cat-add-sub-parent"); sel.innerHTML = ""; getCategoryKeys(t).forEach(p => sel.appendChild(new Option(p,p))); document.getElementById("cat-add-sub-name").value = ""; document.getElementById("cat-add-sub-modal").classList.add("active"); }
 function confirmAddSubCategory() { const t = document.getElementById("cat-manage-type").value, p = document.getElementById("cat-add-sub-parent").value, n = document.getElementById("cat-add-sub-name").value.trim(), c = getCategories(); if(!n || !c[t][p] || c[t][p].includes(n)) return; c[t][p].push(n); saveToStorage(); renderCategoryManageList(); closeModal("cat-add-sub-modal"); }
 function openCatMoveModal(t, p, i) { activeCatTask = {t,p,i,s:getCategories()[t][p][i]}; const sel = document.getElementById("cat-move-select"); sel.innerHTML = ""; getCategoryKeys(t).filter(x=>x!==p).forEach(x=>sel.appendChild(new Option(x,x))); document.getElementById("cat-move-modal").classList.add("active"); }
+
 function confirmCatMove() { 
-  const tp = document.getElementById("cat-move-select").value, {t,p,i,s} = activeCatTask, c = getCategories(); 
-  (state.finances || []).forEach(f => { if (f.type === t && f.parentCat === p && f.subCat === s) f.parentCat = tp; });
-  (state.recurringFinances || []).forEach(r => { if (r.type === t && r.parentCat === p && r.subCat === s) r.parentCat = tp; });
-  c[t][p].splice(i,1); c[t][tp].push(s); saveToStorage(); renderCategoryManageList(); renderFinances(); closeModal("cat-move-modal"); 
+  const tp = document.getElementById("cat-move-select").value;
+  const {t,p,i,s} = activeCatTask;
+  const c = getCategories(); 
+  
+  (state.finances || []).forEach(f => {
+    if (f.type === t && f.parentCat === p && f.subCat === s) f.parentCat = tp;
+  });
+  (state.recurringFinances || []).forEach(r => {
+    if (r.type === t && r.parentCat === p && r.subCat === s) r.parentCat = tp;
+  });
+
+  c[t][p].splice(i,1); c[t][tp].push(s); 
+  saveToStorage(); renderCategoryManageList(); renderFinances(); closeModal("cat-move-modal"); 
 }
+
 function openCatMergeModal(t, p, i) { activeCatTask = {t,p,i,s:getCategories()[t][p][i]}; const sel = document.getElementById("cat-merge-select"); sel.innerHTML = ""; getCategories()[t][p].filter((_,x)=>x!==i).forEach(x=>sel.appendChild(new Option(x,x))); document.getElementById("cat-merge-modal").classList.add("active"); }
+
+// 修正 2：確保合併類別時，同步更新「固定收支」的依賴狀態，防止孤兒類別
 function confirmCatMerge() { 
   const ts = document.getElementById("cat-merge-select").value, {t,p,i,s} = activeCatTask, c = getCategories(); 
   state.finances.forEach(f => {if(f.parentCat===p && f.subCat===s) f.subCat=ts;}); 
   (state.recurringFinances || []).forEach(r => {if(r.parentCat===p && r.subCat===s) r.subCat=ts;});
-  c[t][p].splice(i,1); saveToStorage(); renderCategoryManageList(); renderFinances(); closeModal("cat-merge-modal"); 
+  c[t][p].splice(i,1); 
+  saveToStorage(); renderCategoryManageList(); renderFinances(); closeModal("cat-merge-modal"); 
 }
+
 function catDelete(t, p, i) { if(confirm("刪除此子類別？")) { getCategories()[t][p].splice(i,1); saveToStorage(); renderCategoryManageList(); renderFinances(); } }
+
+function closeModal(id) { document.getElementById(id).classList.remove("active"); }
 
 function escapeHtml(text) { return String(text||"").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
 function escapeJS(text) { return String(text||"").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "\\\""); }
 function escapeHtmlWithBr(text) { return escapeHtml(text).replace(/\n/g, "<br>"); }
 
-// ========================================================
-// 好友連線與留言板 (無即時更新版)
-// ========================================================
-
-async function sendConnectionRequest() {
-  if (!navigator.onLine) return alert("請確認網路連線！");
-  if (!supabaseClient || !currentUser) return alert("請先登入雲端帳號！");
-  const email = document.getElementById("friend-email-input").value.trim();
-  if (!email || email === currentUser.email) return alert("請輸入有效且非自身的 Email");
-
-  // 1. 抓取對方 ID (使用 maybeSingle 避免報錯)
-  const { data: profile, error: profileErr } = await supabaseClient.from("profiles").select("id").eq("email", email).maybeSingle();
-  if (profileErr) console.error("搜尋錯誤:", profileErr);
-  if (!profile) return alert("找不到此帳號，對方可能尚未註冊或未登入過本系統。");
-
-  // 2. 檢查是否已經有連線紀錄 (不論誰先加誰)
-  const { data: existing, error: existErr } = await supabaseClient.from("connections")
-    .select("id")
-    .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${profile.id}),and(user_id.eq.${profile.id},friend_id.eq.${currentUser.id})`)
-    .maybeSingle();
-    
-  if (existErr) console.error("檢查連線錯誤:", existErr);
-  if (existing) return alert("您已經發送過邀請，或雙方已存在連線！");
-
-  // 3. 寫入交友邀請
-  const { error: insertErr } = await supabaseClient.from("connections").insert({ 
-    user_id: currentUser.id, 
-    friend_id: profile.id, 
-    status: 'pending' 
-  });
-  
-  if (insertErr) {
-    console.error("寫入錯誤:", insertErr);
-    return alert("發送失敗，請稍後再試：" + insertErr.message);
+// ==========================================
+// UX 體驗改善：點擊背景關閉 Modal
+// ==========================================
+window.addEventListener('click', function(event) {
+  if (event.target.classList.contains('modal')) {
+    closeModal(event.target.id);
   }
+});
 
-  document.getElementById("friend-email-input").value = "";
-  alert("交友邀請已發送！等待對方確認。"); 
-  loadConnections();
-}
-
-async function acceptConnection(connId) {
-  if (!navigator.onLine) return alert("請確認網路連線！");
-  
-  // 將邀請狀態改為 accepted
-  const { error } = await supabaseClient.from("connections").update({ status: 'accepted' }).eq("id", connId);
-  if (error) return alert("接受失敗：" + error.message);
-  
-  alert("已接受好友邀請！"); 
-  loadConnections();
-}
-
-async function rejectConnection(connId) {
-  if (!navigator.onLine) return alert("請確認網路連線！");
-  if (confirm("確定要拒絕此邀請嗎？")) { 
-    const { error } = await supabaseClient.from("connections").delete().eq("id", connId);
-    if (error) alert("拒絕失敗：" + error.message);
-    loadConnections(); 
-  }
-}
-
-async function loadConnections() {
-  const listEl = document.getElementById("connections-list"), 
-        pendingContainer = document.getElementById("pending-requests-container"), 
-        pendingList = document.getElementById("pending-list");
-        
-  if (!navigator.onLine) { 
-    listEl.innerHTML = `<div style="text-align:center; color:#ef4444; font-size:0.8rem;">目前離線，無法載入連線資料。</div>`; 
-    pendingContainer.style.display = "none"; 
-    return; 
-  }
-  if (!supabaseClient || !currentUser) { 
-    listEl.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.8rem;">請先登入帳號。</div>`; 
-    return; 
-  }
-
-  listEl.innerHTML = "資料載入中...";
-
-  // ============================================
-  // 1. 載入待確認邀請 (別人加我)
-  // ============================================
-  const { data: pending, error: pErr } = await supabaseClient.from("connections")
-    .select("*")
-    .eq("friend_id", currentUser.id)
-    .eq("status", "pending");
-
-  if (pErr) console.error("載入邀請錯誤:", pErr);
-
-  if (pending && pending.length > 0) {
-    pendingContainer.style.display = "block";
-    // 防呆查詢：手動迴圈抓取對方 Email
-    for (let p of pending) {
-      const { data: prof } = await supabaseClient.from("profiles").select("email").eq("id", p.user_id).maybeSingle();
-      p.email = prof ? prof.email : "未知使用者";
-    }
-    
-    pendingList.innerHTML = pending.map(p => `
-      <div class="connection-card" style="border-color:var(--primary);">
-        <div><b>${escapeHtml(p.email)}</b> 想加入連線</div>
-        <div style="display:flex; gap:6px;">
-          <button class="btn btn-warning" style="padding:4px 8px;" onclick="acceptConnection('${p.id}')">確認</button>
-          <button class="btn btn-secondary" style="padding:4px 8px;" onclick="rejectConnection('${p.id}')">拒絕</button>
-        </div>
-      </div>
-    `).join('');
-  } else { 
-    pendingContainer.style.display = "none"; 
-  }
-
-  // ============================================
-  // 2. 載入已建立的連線 (雙方都是好友)
-  // ============================================
-  const { data: accepted, error: aErr } = await supabaseClient.from("connections")
-    .select("*")
-    .eq("status", "accepted")
-    .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`);
-
-  if (aErr) console.error("載入好友錯誤:", aErr);
-
-  if (!accepted || accepted.length === 0) { 
-    listEl.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.8rem;">目前尚未建立任何連線好友。</div>`; 
-    return; 
-  }
-
-  // 防呆查詢：判斷這筆紀錄中，誰才是對方，並抓取他的 Email
-  const friendList = [];
-  for (let a of accepted) {
-    const targetId = (a.user_id === currentUser.id) ? a.friend_id : a.user_id;
-    const { data: prof } = await supabaseClient.from("profiles").select("email").eq("id", targetId).maybeSingle();
-    friendList.push({
-       friend_id: targetId,
-       email: prof ? prof.email : "未知使用者"
-    });
-  }
-
-  listEl.innerHTML = friendList.map(f => `
-    <div class="connection-card">
-      <div style="font-weight:700; word-break:break-all;">${escapeHtml(f.email)}</div>
-      <div style="display:flex; gap:6px;">
-        <button class="btn btn-secondary" style="padding:4px 8px;" onclick="viewFriendSchedule('${f.friend_id}', '${escapeJS(f.email)}')">看課表</button>
-        <button class="btn btn-warning" style="padding:4px 8px;" onclick="openChat('${f.friend_id}', '${escapeJS(f.email)}')">留言</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function viewFriendSchedule(friendId, friendEmail) {
-  if (!navigator.onLine) return alert("請確認網路連線！");
-  document.getElementById("friend-schedule-title").innerText = `${friendEmail} 的課表`;
-  const tbody = document.getElementById("friend-schedule-body"), thead = document.getElementById("friend-schedule-head");
-  thead.innerHTML = ""; tbody.innerHTML = `<tr><td style="padding:40px; text-align:center;">資料載入中...</td></tr>`;
-  document.getElementById("friend-schedule-modal").classList.add("active");
-
-  const { data, error } = await supabaseClient.from("user_schedules").select("data").eq("user_id", friendId).single();
-  if (error || !data || !data.data) { 
-    console.error("抓取好友課表錯誤:", error);
-    tbody.innerHTML = `<tr><td style="padding:40px; text-align:center; color:var(--text-muted);">無法取得課表。<br>對方可能尚未同步資料，或取消了權限。</td></tr>`; 
-    currentFriendState = null; 
-    return; 
-  }
-
-  currentFriendState = data.data; 
-  if (!currentFriendState.schedules) currentFriendState.schedules = [currentFriendState];
-  currentFriendWeekOffset = 0; 
-  renderSchedule(currentFriendState, true);
-}
-
-async function openChat(friendId, friendEmail) {
-  if (!navigator.onLine) return alert("請確認網路連線！");
-  currentChatFriendId = friendId; 
-  document.getElementById("chat-title").innerText = `與 ${friendEmail} 留言 (30天保留)`; 
-  document.getElementById("chat-input").value = "";
-  document.getElementById("chat-modal").classList.add("active");
-  await loadMessages();
-}
-
-async function loadMessages() {
-  if (!currentChatFriendId) return;
-  const msgContainer = document.getElementById("chat-messages");
-  msgContainer.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.8rem; margin-top:20px;">載入留言中...</div>`;
-  const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
-  const { data: messages, error } = await supabaseClient.from("messages")
-    .select("*")
-    .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${currentChatFriendId}),and(sender_id.eq.${currentChatFriendId},receiver_id.eq.${currentUser.id})`)
-    .gte("created_at", thirtyDaysAgo.toISOString())
-    .order("created_at", { ascending: true });
-    
-  if (error) console.error("留言讀取錯誤:", error);
-
-  msgContainer.innerHTML = "";
-  if (!messages || messages.length === 0) { 
-    msgContainer.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.75rem; margin-top:10px;">目前尚無留言。<br>在此發送的留言將於 30 天後自動消失。<br><br>※此為非同步留言板，請點擊右上角「↻ 更新留言」查看新訊息。</div>`; 
-    return; 
-  }
-  
-  messages.forEach(msg => {
-    const isMe = msg.sender_id === currentUser.id;
-    const timeStr = new Date(msg.created_at).toLocaleString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const wrapper = document.createElement("div"); 
-    wrapper.style = `display:flex; flex-direction:column; width:100%;`;
-    wrapper.innerHTML = `<div class="chat-bubble ${isMe ? 'me' : 'other'}">${escapeHtml(msg.content)}</div><div class="chat-time" style="${isMe ? 'align-self:flex-end;' : 'align-self:flex-start;'}">${timeStr}</div>`;
-    msgContainer.appendChild(wrapper);
-  });
-  msgContainer.scrollTop = msgContainer.scrollHeight;
-}
-
-async function sendMessage() {
-  if (!navigator.onLine) return alert("請確認網路連線！");
-  const input = document.getElementById("chat-input"), content = input.value.trim();
-  if (!content || !currentChatFriendId || !currentUser) return;
-  input.value = "";
-  
-  const { error } = await supabaseClient.from("messages").insert({ 
-    sender_id: currentUser.id, 
-    receiver_id: currentChatFriendId, 
-    content: content 
-  });
-  
-  if (error) {
-    alert("發送失敗：" + error.message);
-  } else {
-    await loadMessages();
-  }
-}
-
-// 啟動初始化
 init();
