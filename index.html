@@ -2,7 +2,6 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <!-- 修正無障礙體驗：移除 user-scalable=no 並允許放大至 5.0 -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
   <title>Phyllium的四次元口袋</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,7 +13,8 @@
   <link rel="manifest" href="data:application/manifest+json;utf-8,%7B%22name%22%3A%22Phyllium%E7%9A%84%E5%9B%95%E6%AC%A1%E5%85%83%E5%8F%A3%E8%A2%8b%22%2C%22short_name%22%3A%22Phyllium%E7%9A%84%E5%9B%95%E6%AC%A1%E5%85%83%E5%8F%A3%E8%A2%8b%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f8fafc%22%2C%22theme_color%22%3A%22%232563eb%22%7D">
   <link rel="stylesheet" href="themes.css">
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- 加入 defer 避免渲染阻塞白畫面 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
 </head>
 <body>
   <header>
@@ -223,7 +223,6 @@
       <div class="form-group"><label>課程底色</label><div style="display:flex; align-items:center; gap:8px;"><input type="color" id="sch-color" value="#e0f2fe" style="width:40px; height:32px; padding:0; border:none; border-radius:4px; cursor:pointer;"><button type="button" class="btn btn-secondary" style="font-size:0.72rem; padding:4px 8px;" onclick="resetSchoolColor()">恢復主題最適色</button></div><div id="sch-color-desc" style="font-size:0.68rem; color:var(--text-muted); margin-top:2px;">目前使用：主題最適色</div></div>
       <div class="form-group"><label>總備忘錄 (持續存在)</label><textarea id="sch-memo" rows="2"></textarea></div>
       <div class="form-group"><label>每周備忘錄 (僅限當週更新)</label><textarea id="sch-weekly-memo" rows="2"></textarea></div>
-      <!-- 死線管理區塊 -->
       <div class="form-group" style="border-top: 1px dashed var(--border); padding-top: 8px; margin-top: 8px;">
         <label>重要日程 / 考試死線 <span style="font-size:0.65rem;font-weight:normal;">(儲存後自動同步至所有同名課程)</span></label>
         <div id="sch-deadlines-container" style="margin-bottom:6px;"></div>
@@ -255,6 +254,6 @@
   <div class="modal" id="cat-move-modal"><div class="modal-content"><div class="modal-header">搬移</div><div class="form-group"><label>搬移到：</label><select id="cat-move-select"></select></div><div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('cat-move-modal')">取消</button><button class="btn" onclick="confirmCatMove()">確認</button></div></div></div>
   <div class="modal" id="cat-merge-modal"><div class="modal-content"><div class="modal-header">合併</div><div class="form-group"><label>合併到：</label><select id="cat-merge-select"></select></div><div class="modal-actions"><button class="btn btn-secondary" onclick="closeModal('cat-merge-modal')">取消</button><button class="btn" onclick="confirmCatMerge()">確認</button></div></div></div>
 
-  <script src="app.js"></script>
+  <script src="app.js" defer></script>
 </body>
 </html>

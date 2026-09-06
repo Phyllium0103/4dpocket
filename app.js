@@ -7,15 +7,18 @@ const SUPABASE_ANON_KEY = "sb_publishable_-xqiL_LXkK2pWt5UopJ5Nw__OxyEmOH";
 let supabaseClient = null;
 let currentUser = null;
 
-if (SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 5) {
+// 修正 4：防護 Supabase SDK 未載入導致全站癱瘓的問題
+if (typeof supabase !== 'undefined' && SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 5) {
   supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} else {
+  console.warn("Supabase SDK 未載入或設定不正確，將以純本機模式運行。");
 }
 
 function triggerHaptic(duration = 20) {
   if (navigator.vibrate) navigator.vibrate(duration);
 }
 
-// 修正：資料遺失風險，防護使用者在同步期間離開
+// 防護使用者在同步期間離開
 let isSaving = false;
 window.addEventListener('beforeunload', (e) => {
   if (isSaving) {
@@ -81,7 +84,7 @@ function createDefaultState() {
 let state = createDefaultState();
 let currentEditingSlot = null, currentEditingTutoringId = null, currentEditingWorkId = null, currentEditingBillingIndex = null, currentEditingWorkBillingIndex = null;
 let currentViewingOverrideId = null, currentViewingTempEventId = null, currentEditingOverrideId = null, currentEditingTempEventId = null;
-let currentWeekOffset = 0, currentSelectedStudentFilter = "all", currentBillingType = "tutoring";
+let currentWeekOffset = 0, currentSelectedStudentFilter = "__FILTER_ALL__", currentBillingType = "tutoring";
 let financeActiveMode = "all", financeActiveMainCat = "all", financeActiveSubCat = "all", isExpenseChartVisible = false;
 let activeCatTask = { type: "", pCat: "", sIdx: "" };
 
@@ -132,6 +135,12 @@ function getCategoryKeys(type) {
   return state.categoryOrder[type];
 }
 
+// 修正 6：建立一致的日期解析函式，避免跨時區解析錯誤
+function parseLocalDate(dateStr) {
+  if (!dateStr) return new Date();
+  return new Date(dateStr.replace(/-/g, '/'));
+}
+
 function timeToMinutes(timeStr) { if (!timeStr) return 0; const [h, m] = timeStr.split(":").map(Number); return (h || 0) * 60 + (m || 0); }
 function isDaytimeSlot(startTime, endTime) { const startMin = timeToMinutes(startTime), endMin = timeToMinutes(endTime), dayStart = 8 * 60, dayEnd = 17 * 60; return (startMin >= dayStart && startMin <= dayEnd) || (endMin >= dayStart && endMin <= dayEnd); }
 function timeToPixelOffset(timeMins, periods) {
@@ -148,7 +157,10 @@ function timeToPixelOffset(timeMins, periods) {
   return periods.length * CELL_HEIGHT;
 }
 
-function getComputedThemeColor(variableName) { const temp = document.createElement("div"); temp.style.color = `var(${variableName})`; document.body.appendChild(temp); const computed = window.getComputedStyle(temp).color; document.body.removeChild(temp); return computed; }
+// 修正 3：改善 DOM 重繪效能，直接從 documentElement 取得變數
+function getComputedThemeColor(variableName) { 
+  return getComputedStyle(document.documentElement).getPropertyValue(variableName).trim(); 
+}
 function getDefaultSchoolBgHex() { return rgbToHex(getComputedThemeColor("--school-def-bg")) || "#e0f2fe"; }
 function getDefaultTutoringBgHex() { return rgbToHex(getComputedThemeColor("--tutoring-def-bg")) || "#fef3c7"; }
 function getDefaultWorkBgHex() { return getDefaultTutoringBgHex(); }
@@ -206,7 +218,9 @@ function onSelectPresetCourse(jsonStr) {
     }
     document.getElementById("sch-color").value = c.color || getDefaultSchoolBgHex();
     if (c.deadlines) { tempDeadlines = JSON.parse(JSON.stringify(c.deadlines)); renderModalDeadlines(); }
-  } catch (e) {}
+  } catch (e) {
+    console.error("Parse error:", e);
+  }
 }
 
 function onSchTypeChange(val) { document.getElementById("sch-type-custom-wrap").style.display = val === "custom" ? "block" : "none"; }
@@ -218,7 +232,9 @@ function onSelectPresetTutoring(jsonStr) {
     document.getElementById("tut-student").value = t.student || ""; if (t.day) document.getElementById("tut-day").value = t.day; if (t.startTime) document.getElementById("tut-start-time").value = t.startTime; if (t.endTime) document.getElementById("tut-end-time").value = t.endTime;
     document.getElementById("tut-subject").value = t.subject || ""; document.getElementById("tut-location").value = t.location || ""; document.getElementById("tut-line").value = t.line || ""; document.getElementById("tut-fb").value = t.fb || ""; document.getElementById("tut-phone").value = t.phone || "";
     if (t.rate) document.getElementById("tut-rate").value = t.rate; document.getElementById("tut-memo").value = t.memo || ""; document.getElementById("tut-color").value = t.color || getDefaultTutoringBgHex();
-  } catch (e) {}
+  } catch (e) {
+    console.error("Parse error:", e);
+  }
 }
 
 function onSelectPresetWork(jsonStr) {
@@ -227,7 +243,9 @@ function onSelectPresetWork(jsonStr) {
     const w = JSON.parse(jsonStr);
     document.getElementById("work-name").value = w.name || ""; if (w.day) document.getElementById("work-day").value = w.day; if (w.startTime) document.getElementById("work-start-time").value = w.startTime; if (w.endTime) document.getElementById("work-end-time").value = w.endTime;
     document.getElementById("work-location").value = w.location || ""; if (w.rate) document.getElementById("work-rate").value = w.rate; document.getElementById("work-memo").value = w.memo || ""; document.getElementById("work-color").value = w.color || getDefaultWorkBgHex();
-  } catch (e) {}
+  } catch (e) {
+    console.error("Parse error:", e);
+  }
 }
 
 function resetSchoolColor() { document.getElementById("sch-color").value = getDefaultSchoolBgHex(); document.getElementById("sch-color-desc").innerText = "目前使用：主題最適色"; }
@@ -248,6 +266,7 @@ async function checkAuthSession() {
 
 function updateUserUI(isLoggedIn, email = "") {
   const dot = document.getElementById("sync-dot"), text = document.getElementById("sync-user-text"), btn = document.getElementById("btn-auth-action");
+  text.style.color = "inherit"; // 修正：重置顏色
   if (isLoggedIn) { dot.className = "status-dot online"; text.innerText = `已同步: ${email}`; btn.innerText = "登出"; btn.onclick = handleAuthLogout; }
   else { dot.className = "status-dot"; text.innerText = "未登入 (離線)"; btn.innerText = "登入 / 註冊"; btn.onclick = openAuthModal; }
 }
@@ -274,9 +293,20 @@ async function handleAuthLogout() {
   if (confirm("確定登出？")) { await supabaseClient.auth.signOut(); currentUser = null; updateUserUI(false); }
 }
 
+// 修正 5：檢查 Supabase 寫入是否真的成功並回傳結果
 async function pushCloudData() {
-  if (!supabaseClient || !currentUser) return;
-  try { await supabaseClient.from("user_schedules").upsert({ user_id: currentUser.id, data: state, updated_at: new Date() }); } catch (e) {}
+  if (!supabaseClient || !currentUser) return false;
+  try { 
+    const { error } = await supabaseClient.from("user_schedules").upsert({ user_id: currentUser.id, data: state, updated_at: new Date() });
+    if (error) {
+      console.error("雲端同步寫入失敗:", error.message);
+      return false;
+    }
+    return true;
+  } catch (e) { 
+    console.error("雲端同步發生例外錯誤:", e);
+    return false;
+  }
 }
 
 async function pullCloudData() {
@@ -295,10 +325,11 @@ async function pullCloudData() {
       document.getElementById("text-align-select").value = state.textAlign || "center";
       renderSchedule(); renderBillings(); renderFinances();
     } else { await pushCloudData(); }
-  } catch (e) {}
+  } catch (e) {
+    console.error("Cloud pull error:", e);
+  }
 }
 
-// 修正：將 saveToStorage 改為 async，實作 Loading 狀態與確保同步
 async function saveToStorage() { 
   isSaving = true;
   const syncText = document.getElementById("sync-user-text");
@@ -308,16 +339,26 @@ async function saveToStorage() {
      syncText.innerText = "儲存中...";
   }
 
+  let syncSuccess = false;
   try { 
     localStorage.setItem("local_schedule_v2_data", JSON.stringify(state)); 
     updatePresetDropdowns(); 
-    await pushCloudData(); 
+    if (supabaseClient && currentUser) {
+      syncSuccess = await pushCloudData(); 
+    }
   } catch (e) {
     console.error("Storage/Cloud sync error:", e);
   } finally {
     isSaving = false;
+    // 修正 5：正確顯示雲端儲存狀態
     if (syncText) {
-      syncText.innerText = currentUser ? `已同步: ${currentUser.email}` : "未登入 (離線)";
+      if (currentUser) {
+        syncText.innerText = syncSuccess ? `已同步: ${currentUser.email}` : "同步失敗 / 請檢查網路";
+        syncText.style.color = syncSuccess ? "inherit" : "#ef4444";
+      } else {
+        syncText.innerText = "未登入 (離線)";
+        syncText.style.color = "inherit";
+      }
     }
   }
 }
@@ -367,18 +408,50 @@ function toggleDeadlineBanner() {
 function checkRecurringFinances() {
   if (!state.recurringFinances) state.recurringFinances = [];
   let modified = false;
-  const today = new Date(); const curYear = today.getFullYear(); const curMonthStr = `${curYear}-${String(today.getMonth() + 1).padStart(2, '0')}`; const curDay = today.getDate();
+  
+  const today = new Date(); 
+  const curYear = today.getFullYear(); 
+  const curMonth = today.getMonth() + 1; // 1-12
+  const curDay = today.getDate();
 
   state.recurringFinances.forEach(item => {
-    if (item.lastTriggeredMonth !== curMonthStr && curDay >= item.dayOfMonth) {
+    if (!item.lastTriggeredMonth) {
+      const pm = curMonth === 1 ? 12 : curMonth - 1;
+      const py = curMonth === 1 ? curYear - 1 : curYear;
+      item.lastTriggeredMonth = `${py}-${String(pm).padStart(2, '0')}`;
+    }
+
+    let [lastY, lastM] = item.lastTriggeredMonth.split('-').map(Number);
+    let checkY = lastY;
+    let checkM = lastM + 1;
+    if (checkM > 12) { checkM = 1; checkY++; }
+
+    while (checkY < curYear || (checkY === curYear && checkM <= curMonth)) {
+      const daysInCheckMonth = new Date(checkY, checkM, 0).getDate();
+      const targetDay = Math.min(item.dayOfMonth, daysInCheckMonth);
+
+      if (checkY === curYear && checkM === curMonth && curDay < targetDay) {
+        break;
+      }
+
+      const entryDate = `${checkY}-${String(checkM).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`;
       if (!state.finances) state.finances = [];
-      const entryDate = `${curMonthStr}-${String(item.dayOfMonth).padStart(2, '0')}`;
       state.finances.unshift({
-        id: "fin_rec_" + Date.now() + Math.floor(Math.random() * 1000), date: entryDate, type: item.type, parentCat: item.parentCat, subCat: item.subCat, amount: Number(item.amount), notes: item.notes || "固定收支", remaining: (item.type === 'receivable' || item.type === 'payable') ? Number(item.amount) : undefined, isHidden: false
+        id: "fin_rec_" + Date.now() + Math.floor(Math.random() * 1000),
+        date: entryDate, type: item.type, parentCat: item.parentCat, subCat: item.subCat, 
+        amount: Number(item.amount), notes: item.notes || "固定收支", 
+        remaining: (item.type === 'receivable' || item.type === 'payable') ? Number(item.amount) : undefined, 
+        isHidden: false
       });
-      item.lastTriggeredMonth = curMonthStr; modified = true;
+
+      item.lastTriggeredMonth = `${checkY}-${String(checkM).padStart(2, '0')}`;
+      modified = true;
+
+      checkM++;
+      if (checkM > 12) { checkM = 1; checkY++; }
     }
   });
+
   if (modified) { saveToStorage(); renderFinances(); }
 }
 
@@ -399,7 +472,9 @@ function init() {
           state.activeScheduleId = dId;
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Init parse error:", e);
+    }
   }
 
   document.documentElement.setAttribute("data-theme-style", state.themeStyle);
@@ -482,24 +557,24 @@ function openViewDetailModal(type, payload) {
   if (type === "school") {
     const { day, periodId, course } = payload; titleEl.innerText = course.name || "空堂";
     const weeklyMemo = (sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`school_${day}_${periodId}`]) || "";
-    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">時間</div><div class="detail-value">${dayNames[day]} 第 ${periodId} 節</div>${course.type ? `<div class="detail-label">課程屬性</div><div class="detail-value">${escapeHtml(course.type)}</div>` : ""}${course.room ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(course.room)}</div>` : ""}${course.teacher ? `<div class="detail-label">教師</div><div class="detail-value">${escapeHtml(course.teacher)}</div>` : ""}${course.memo ? `<div class="detail-label">總備忘錄</div><div class="detail-value">${escapeHtml(course.memo)}</div>` : ""}${weeklyMemo ? `<div class="detail-label">每周備忘錄</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${escapeHtml(weeklyMemo)}</div>` : ""}</div>`;
+    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">時間</div><div class="detail-value">${dayNames[day]} 第 ${periodId} 節</div>${course.type ? `<div class="detail-label">課程屬性</div><div class="detail-value">${escapeHtml(course.type)}</div>` : ""}${course.room ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(course.room)}</div>` : ""}${course.teacher ? `<div class="detail-label">教師</div><div class="detail-value">${escapeHtml(course.teacher)}</div>` : ""}${course.memo ? `<div class="detail-label">總備忘錄</div><div class="detail-value">${escapeHtmlWithBr(course.memo)}</div>` : ""}${weeklyMemo ? `<div class="detail-label">每周備忘錄</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${escapeHtmlWithBr(weeklyMemo)}</div>` : ""}</div>`;
     switchBtn.onclick = () => { closeModal("view-detail-modal"); openSchoolModal(day, periodId); };
   } else if (type === "tutoring") {
     const { tut } = payload; titleEl.innerText = `家教: ${tut.student}`;
     const weeklyMemo = (sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`tut_${tut.id}`]) || "";
-    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">時間</div><div class="detail-value">${dayNames[tut.day]} ${tut.startTime} ~ ${tut.endTime}</div>${tut.subject ? `<div class="detail-label">科目</div><div class="detail-value">${escapeHtml(tut.subject)}</div>` : ""}${tut.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(tut.location)}</div>` : ""}${tut.memo ? `<div class="detail-label">備忘錄</div><div class="detail-value">${escapeHtml(tut.memo)}</div>` : ""}${weeklyMemo ? `<div class="detail-label">每周備忘錄</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${escapeHtml(weeklyMemo)}</div>` : ""}</div>`;
+    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">時間</div><div class="detail-value">${dayNames[tut.day]} ${tut.startTime} ~ ${tut.endTime}</div>${tut.subject ? `<div class="detail-label">科目</div><div class="detail-value">${escapeHtml(tut.subject)}</div>` : ""}${tut.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(tut.location)}</div>` : ""}${tut.memo ? `<div class="detail-label">備忘錄</div><div class="detail-value">${escapeHtmlWithBr(tut.memo)}</div>` : ""}${weeklyMemo ? `<div class="detail-label">每周備忘錄</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${escapeHtmlWithBr(weeklyMemo)}</div>` : ""}</div>`;
     switchBtn.onclick = () => { closeModal("view-detail-modal"); openTutoringModal(tut.id); };
   } else if (type === "work") {
     const { work } = payload; titleEl.innerText = `工作: ${work.name}`;
-    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">類型</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${work.type === "weekly" ? "每週工作" : "固定工作"}</div><div class="detail-label">時間</div><div class="detail-value">${dayNames[work.day]} ${work.startTime} ~ ${work.endTime}</div>${work.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(work.location)}</div>` : ""}${work.memo ? `<div class="detail-label">備忘</div><div class="detail-value">${escapeHtml(work.memo)}</div>` : ""}</div>`;
+    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">類型</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${work.type === "weekly" ? "每週工作" : "固定工作"}</div><div class="detail-label">時間</div><div class="detail-value">${dayNames[work.day]} ${work.startTime} ~ ${work.endTime}</div>${work.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(work.location)}</div>` : ""}${work.memo ? `<div class="detail-label">備忘</div><div class="detail-value">${escapeHtmlWithBr(work.memo)}</div>` : ""}</div>`;
     switchBtn.onclick = () => { closeModal("view-detail-modal"); openWorkModal(work.id); };
   } else if (type === "override") {
     const { ovr } = payload; currentViewingOverrideId = ovr.id; titleEl.innerText = `調課: ${ovr.title}`;
-    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">目標時間</div><div class="detail-value">${ovr.targetDate} (${ovr.startTime}~${ovr.endTime})</div>${ovr.memo ? `<div class="detail-label">備註</div><div class="detail-value">${escapeHtml(ovr.memo)}</div>` : ""}</div>`;
+    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">目標時間</div><div class="detail-value">${ovr.targetDate} (${ovr.startTime}~${ovr.endTime})</div>${ovr.memo ? `<div class="detail-label">備註</div><div class="detail-value">${escapeHtmlWithBr(ovr.memo)}</div>` : ""}</div>`;
     switchBtn.onclick = () => { closeModal("view-detail-modal"); openOverrideModal(ovr.id); }; revertBtn.style.display = "inline-flex";
   } else if (type === "temp_event") {
     const { tmp } = payload; currentViewingTempEventId = tmp.id; titleEl.innerText = `事件: ${tmp.title}`;
-    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">時間</div><div class="detail-value">${dayNames[tmp.day]} ${tmp.startTime}~${tmp.endTime}</div>${tmp.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(tmp.location)}</div>` : ""}${tmp.memo ? `<div class="detail-label">備忘</div><div class="detail-value">${escapeHtml(tmp.memo)}</div>` : ""}</div>`;
+    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">時間</div><div class="detail-value">${dayNames[tmp.day]} ${tmp.startTime}~${tmp.endTime}</div>${tmp.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(tmp.location)}</div>` : ""}${tmp.memo ? `<div class="detail-label">備忘</div><div class="detail-value">${escapeHtmlWithBr(tmp.memo)}</div>` : ""}</div>`;
     switchBtn.onclick = () => { closeModal("view-detail-modal"); openTempEventModal(tmp.id); };
   }
   document.getElementById("view-detail-modal").classList.add("active");
@@ -550,7 +625,6 @@ function renderDeadlinesBanner() {
     });
   }
 
-  // 同名去重複
   const uniqueMap = {}; let allDl = [];
   rawDl.forEach(dl => {
     const key = `${dl.courseName}_${dl.title}_${dl.date}`;
@@ -559,20 +633,18 @@ function renderDeadlinesBanner() {
 
   const today = new Date(); today.setHours(0,0,0,0);
   allDl = allDl.filter(dl => { 
-    // 修復跨時區 Bug：將 - 替換為 /
-    const dDate = new Date(dl.date.replace(/-/g, '/')); 
+    const dDate = parseLocalDate(dl.date); 
     dDate.setHours(0,0,0,0); 
     return dDate >= today; 
   });
-  allDl.sort((a,b) => new Date(a.date.replace(/-/g, '/')) - new Date(b.date.replace(/-/g, '/')));
+  allDl.sort((a,b) => parseLocalDate(a.date) - parseLocalDate(b.date));
 
   if (allDl.length === 0) { banner.style.display = "none"; return; }
   banner.style.display = "block";
 
   const urgentDl = [], normalDl = [];
   allDl.forEach(dl => {
-    // 修復跨時區 Bug
-    const d = new Date(dl.date.replace(/-/g, '/')); 
+    const d = parseLocalDate(dl.date); 
     d.setHours(0,0,0,0);
     const df = Math.round((d - today) / (1000*60*60*24));
     dl.diffDays = df; dl.diffText = df === 0 ? "今天" : `${df} 天後`;
@@ -589,7 +661,7 @@ function renderDeadlinesBanner() {
 
   const listEl = document.getElementById("deadline-list"); listEl.innerHTML = "";
   allDl.forEach(dl => {
-    const d = new Date(dl.date.replace(/-/g, '/'));
+    const d = parseLocalDate(dl.date);
     const item = document.createElement("div"); item.className = "deadline-item";
     item.innerHTML = `<span><b>[${escapeHtml(dl.courseName)}]</b> ${escapeHtml(dl.title)}</span> <span style="color:var(--primary); font-weight:600;">${dl.diffText} (${formatShortDate(d)})</span>`;
     listEl.appendChild(item);
@@ -599,7 +671,7 @@ function renderDeadlinesBanner() {
 function renderModalDeadlines() {
   const container = document.getElementById("sch-deadlines-container"); container.innerHTML = "";
   if (tempDeadlines.length === 0) { container.innerHTML = `<div style="font-size:0.7rem; color:var(--text-muted);">無排定日程</div>`; return; }
-  tempDeadlines.sort((a,b) => new Date(a.date.replace(/-/g, '/')) - new Date(b.date.replace(/-/g, '/')));
+  tempDeadlines.sort((a,b) => parseLocalDate(a.date) - parseLocalDate(b.date));
   tempDeadlines.forEach((dl, idx) => {
     const row = document.createElement("div");
     row.style = "display:flex; justify-content:space-between; align-items:center; background:var(--table-th-bg); padding:4px 6px; border-radius:4px; margin-bottom:4px; font-size:0.75rem;";
@@ -661,8 +733,7 @@ function renderSchedule() {
 
     const tbody = document.getElementById("schedule-body"); tbody.innerHTML = "";
     
-    // 修復跨時區 Bug
-    const schStart = new Date((sch.startDate || "2026-09-07").replace(/-/g, '/')), schEnd = new Date((sch.endDate || "2027-01-10").replace(/-/g, '/'));
+    const schStart = parseLocalDate(sch.startDate || "2026-09-07"), schEnd = parseLocalDate(sch.endDate || "2027-01-10");
     schStart.setHours(0,0,0,0); schEnd.setHours(23,59,59,999);
 
     if (rangeEnd < schStart || monday > schEnd) {
@@ -670,7 +741,7 @@ function renderSchedule() {
       renderDeadlinesBanner(); return;
     }
 
-    renderDeadlinesBanner(); // 渲染死線倒數
+    renderDeadlinesBanner();
 
     const periodsToRender = (sch.periods || initialDefaultPeriods).filter((p) => !p.optional || state.showLatePeriods);
     const currentWeekTempEvents = (sch.temporaryEvents || []).filter((t) => t.weekKey === weekKey);
@@ -680,8 +751,6 @@ function renderSchedule() {
     periodsToRender.forEach((p, pIdx) => {
       const tr = document.createElement("tr"), timeTh = document.createElement("td");
       timeTh.className = "col-time"; 
-      
-      // 修正：XSS 漏洞防護，加入 escapeHtml()
       timeTh.innerHTML = `<div>${escapeHtml(p.name)}</div><div style="color:var(--text-muted); font-size:0.58rem;">${escapeHtml(p.start)}</div>`; 
       tr.appendChild(timeTh);
 
@@ -775,7 +844,9 @@ function renderSchedule() {
       }
       tbody.appendChild(eveningTr);
     }
-  } catch (err) {}
+  } catch (err) {
+    console.error("Render schedule error:", err);
+  }
 }
 
 function openSchoolModal(day, period) {
@@ -803,7 +874,6 @@ function saveSchoolCourse() {
 
   if (!sch.courses) sch.courses = {};
   
-  // 1. 取得修改前的舊名稱
   const oldCourse = sch.courses[key];
   const oldName = oldCourse ? oldCourse.name : null;
 
@@ -811,10 +881,9 @@ function saveSchoolCourse() {
   else {
     sch.courses[key] = { name, type: typeVal, room: document.getElementById("sch-room").value.trim(), teacher: document.getElementById("sch-teacher").value.trim(), memo: document.getElementById("sch-memo").value.trim(), color: color.toLowerCase() === getDefaultSchoolBgHex().toLowerCase() ? undefined : color, deadlines: JSON.parse(JSON.stringify(tempDeadlines)) };
     
-    // 2. 同步死線到所有同名課程 (包含「舊名稱」的課程一併連動改名與同步)
     Object.keys(sch.courses).forEach(k => {
       if (sch.courses[k].name === name || (oldName && sch.courses[k].name === oldName)) {
-        sch.courses[k].name = name; // 確保連動改名，避免孤立
+        sch.courses[k].name = name;
         sch.courses[k].deadlines = JSON.parse(JSON.stringify(tempDeadlines));
       }
     });
@@ -833,7 +902,7 @@ function deleteSchoolCourse() {
 }
 
 // ==========================================
-// 臨時調課 (修復的部份)
+// 臨時調課 
 // ==========================================
 function openOverrideModal(id = null) {
   currentEditingOverrideId = id;
@@ -856,7 +925,11 @@ function openOverrideModal(id = null) {
   if (id) {
     const ovr = (sch.overrides || []).find(o => o.id === id);
     if (ovr) {
-      selectEl.value = `${ovr.type}_${ovr.sourceKey || ovr.sourceId}`;
+      const optionValue = `${ovr.type}_${ovr.sourceKey || ovr.sourceId}`;
+      if (!Array.from(selectEl.options).some(opt => opt.value === optionValue)) {
+        selectEl.appendChild(new Option(`[已刪除或失效項目] ${ovr.title}`, optionValue));
+      }
+      selectEl.value = optionValue;
       document.getElementById("ovr-target-date").value = ovr.targetDate;
       document.getElementById("ovr-start-time").value = ovr.startTime;
       document.getElementById("ovr-end-time").value = ovr.endTime;
@@ -1033,14 +1106,14 @@ function saveTempEvent() {
   saveToStorage(); renderSchedule(); closeModal("temp-event-modal");
 }
 
-function switchBillingType(type) { currentBillingType = type; currentSelectedStudentFilter = "all"; document.getElementById("btn-billing-type-tutoring").className = `billing-type-btn ${type === "tutoring" ? "active" : ""}`; document.getElementById("btn-billing-type-work").className = `billing-type-btn ${type === "work" ? "active" : ""}`; document.getElementById("nav-billing-text").innerText = type === "tutoring" ? "家教帳務" : "工作帳務"; renderBillings(); }
+function switchBillingType(type) { currentBillingType = type; currentSelectedStudentFilter = "__FILTER_ALL__"; document.getElementById("btn-billing-type-tutoring").className = `billing-type-btn ${type === "tutoring" ? "active" : ""}`; document.getElementById("btn-billing-type-work").className = `billing-type-btn ${type === "work" ? "active" : ""}`; document.getElementById("nav-billing-text").innerText = type === "tutoring" ? "家教帳務" : "工作帳務"; renderBillings(); }
 function openCurrentBillingModal() { currentBillingType === "work" ? openWorkBillingModal() : openBillingModal(); }
 function setBillingMonthCurrent() { const now = new Date(); document.getElementById("bill-month-filter").value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`; renderBillings(); }
 function setBillingMonthAll() { document.getElementById("bill-month-filter").value = ""; renderBillings(); }
 function setStudentFilter(name) { triggerHaptic(15); currentSelectedStudentFilter = name; renderBillings(); }
 
 function renderBillings() {
-  const tbody = document.getElementById("billing-body"); tbody.innerHTML = "";
+  const tbody = document.getElementById("billing-body"); 
   const isWork = currentBillingType === "work", selectedMonth = document.getElementById("bill-month-filter").value, sortOrder = document.getElementById("bill-sort-order").value;
   document.getElementById("th-billing-target").innerText = isWork ? "工作名稱" : "學生"; document.getElementById("stat-unpaid-title").innerText = isWork ? "未領取金額" : "未繳清金額";
   
@@ -1048,8 +1121,10 @@ function renderBillings() {
   (state.schedules || []).forEach(sch => { (isWork ? sch.works : sch.tutorings).forEach(x => { if(x.name || x.student) allNamesSet.add(x.name || x.student); }); });
   (isWork ? state.workBillings : state.billings).forEach(b => { if(b.name || b.student) allNamesSet.add(b.name || b.student); });
   
-  const chips = document.getElementById("student-filter-chips"); chips.innerHTML = `<div class="student-chip ${currentSelectedStudentFilter === "all" ? "active" : ""}" onclick="setStudentFilter('all')">${isWork ? "全部工作" : "全部學生"}</div>`;
-  Array.from(allNamesSet).forEach(item => chips.innerHTML += `<div class="student-chip ${currentSelectedStudentFilter === item ? "active" : ""}" onclick="setStudentFilter('${item}')">${item}</div>`);
+  const chips = document.getElementById("student-filter-chips"); 
+  let chipsHtml = `<div class="student-chip ${currentSelectedStudentFilter === "__FILTER_ALL__" ? "active" : ""}" onclick="setStudentFilter('__FILTER_ALL__')">${isWork ? "全部工作" : "全部學生"}</div>`;
+  Array.from(allNamesSet).forEach(item => chipsHtml += `<div class="student-chip ${currentSelectedStudentFilter === item ? "active" : ""}" onclick="setStudentFilter('${escapeJS(item)}')">${escapeHtml(item)}</div>`);
+  chips.innerHTML = chipsHtml;
 
   let tH = 0, tI = 0, tU = 0, statMap = {};
   (isWork ? state.workBillings : state.billings).forEach(r => {
@@ -1057,19 +1132,25 @@ function renderBillings() {
     const targetName = (isWork ? r.name : r.student) || "未具名", h = Number(r.hours || 0), tot = Number(r.total || 0);
     if (!statMap[targetName]) statMap[targetName] = { h:0, i:0, u:0, p:0 };
     statMap[targetName].h += h; statMap[targetName].i += tot; if (r.status === "unpaid") statMap[targetName].u += tot; else statMap[targetName].p += tot;
-    if (currentSelectedStudentFilter === "all" || currentSelectedStudentFilter === targetName) { tH += h; tI += tot; if (r.status === "unpaid") tU += tot; }
+    if (currentSelectedStudentFilter === "__FILTER_ALL__" || currentSelectedStudentFilter === targetName) { tH += h; tI += tot; if (r.status === "unpaid") tU += tot; }
   });
 
-  const statsC = document.getElementById("student-stats-container"); statsC.innerHTML = "";
+  const statsC = document.getElementById("student-stats-container");
+  let statsHtml = "";
   Object.keys(statMap).forEach(k => {
-    statsC.innerHTML += `<div class="student-stat-card"><div class="student-stat-name">${escapeHtml(k)}</div><div class="student-stat-row"><span>時數：</span><strong>${statMap[k].h} hr</strong></div><div class="student-stat-row"><span>應收：</span><strong>$${statMap[k].i.toLocaleString()}</strong></div><div class="student-stat-row"><span>已收：</span><span style="color:#15803d; font-weight:700;">$${statMap[k].p.toLocaleString()}</span></div><div class="student-stat-row"><span>未繳：</span><span style="color:#ef4444; font-weight:700;">$${statMap[k].u.toLocaleString()}</span></div></div>`;
+    statsHtml += `<div class="student-stat-card"><div class="student-stat-name">${escapeHtml(k)}</div><div class="student-stat-row"><span>時數：</span><strong>${statMap[k].h} hr</strong></div><div class="student-stat-row"><span>應收：</span><strong>$${statMap[k].i.toLocaleString()}</strong></div><div class="student-stat-row"><span>已收：</span><span style="color:#15803d; font-weight:700;">$${statMap[k].p.toLocaleString()}</span></div><div class="student-stat-row"><span>未繳：</span><span style="color:#ef4444; font-weight:700;">$${statMap[k].u.toLocaleString()}</span></div></div>`;
   });
+  statsC.innerHTML = statsHtml;
 
-  const filtered = (isWork ? state.workBillings : state.billings).map((record, idx) => ({record, idx})).filter(({record}) => (!selectedMonth || (record.date||'').slice(0,7) === selectedMonth) && (currentSelectedStudentFilter === "all" || (isWork ? record.name : record.student) === currentSelectedStudentFilter)).sort((a,b) => sortOrder === "asc" ? a.record.date.localeCompare(b.record.date) : b.record.date.localeCompare(a.record.date));
+  const filtered = (isWork ? state.workBillings : state.billings).map((record, idx) => ({record, idx})).filter(({record}) => (!selectedMonth || (record.date||'').slice(0,7) === selectedMonth) && (currentSelectedStudentFilter === "__FILTER_ALL__" || (isWork ? record.name : record.student) === currentSelectedStudentFilter)).sort((a,b) => sortOrder === "asc" ? a.record.date.localeCompare(b.record.date) : b.record.date.localeCompare(a.record.date));
+  
+  let tbodyHtml = "";
   filtered.forEach(({record, idx}) => {
-    tbody.innerHTML += `<tr><td>${record.date}</td><td><strong>${escapeHtml(isWork ? record.name : record.student)}</strong></td><td>${record.hours}h</td><td>$${record.rate}</td><td><strong style="color:var(--primary);">$${record.total}</strong></td><td><span class="${record.status === "paid" ? "tag-paid" : "tag-unpaid"}">${record.status === "paid" ? "已清" : "未清"}</span></td><td>${escapeHtml(record.notes || "-")}</td><td><button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'toggleWorkBillStatus' : 'toggleBillStatus'}(${idx})">切換</button> <button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'openWorkBillingModal' : 'openBillingModal'}(${idx})">編輯</button> <button class="btn btn-danger" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'deleteWorkBilling' : 'deleteBilling'}(${idx})">刪除</button></td></tr>`;
+    tbodyHtml += `<tr><td>${record.date}</td><td><strong>${escapeHtml(isWork ? record.name : record.student)}</strong></td><td>${record.hours}h</td><td>$${record.rate}</td><td><strong style="color:var(--primary);">$${record.total}</strong></td><td><span class="${record.status === "paid" ? "tag-paid" : "tag-unpaid"}">${record.status === "paid" ? "已清" : "未清"}</span></td><td>${escapeHtml(record.notes || "-")}</td><td><button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'toggleWorkBillStatus' : 'toggleBillStatus'}(${idx})">切換</button> <button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'openWorkBillingModal' : 'openBillingModal'}(${idx})">編輯</button> <button class="btn btn-danger" style="padding:2px 4px; font-size:0.68rem;" onclick="${isWork ? 'deleteWorkBilling' : 'deleteBilling'}(${idx})">刪除</button></td></tr>`;
   });
-  if (filtered.length === 0) tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:12px;">無紀錄</td></tr>`;
+  if (filtered.length === 0) tbodyHtml = `<tr><td colspan="8" style="text-align:center; color:var(--text-muted); padding:12px;">無紀錄</td></tr>`;
+  tbody.innerHTML = tbodyHtml;
+  
   document.getElementById("stat-total-hours").innerText = `${tH} 小時`; document.getElementById("stat-total-income").innerText = `$${tI.toLocaleString()}`; document.getElementById("stat-unpaid").innerText = `$${tU.toLocaleString()}`;
 }
 
@@ -1096,7 +1177,7 @@ function onBillingDateOrStudentChange() { updateBillingRateByDateAndStudent(); }
 function updateBillingRateByDateAndStudent() {
   if (currentEditingBillingIndex !== null) return; const name = document.getElementById("bill-student").value.trim();
   const tuts = (state.schedules||[]).flatMap(s => (s.tutorings||[]).filter(t => t.student === name));
-  document.getElementById("bill-rate").value = (tuts.find(t => Number(t.day) === (new Date(document.getElementById("bill-date").value.replace(/-/g, '/')).getDay()||7)) || tuts[0] || {rate:""}).rate || ""; calcBillAmount();
+  document.getElementById("bill-rate").value = (tuts.find(t => Number(t.day) === (parseLocalDate(document.getElementById("bill-date").value).getDay()||7)) || tuts[0] || {rate:""}).rate || ""; calcBillAmount();
 }
 function calcBillAmount() { document.getElementById("bill-total").value = Math.round((Number(document.getElementById("bill-hours").value)||0) * (Number(document.getElementById("bill-rate").value)||0)); }
 function saveBillingRecord() {
@@ -1159,9 +1240,8 @@ function saveFinanceRecord() {
     const idx = state.finances.findIndex(f => f.id === id); 
     const oldItem = state.finances[idx];
     
-    // 檢查是否為還款紀錄，並重新計算原欠款的剩餘金額
     if (oldItem.targetDebtId && oldItem.subCat === "還款") {
-      const diff = amount - oldItem.amount; // 負數代表還少了，正數代表還多了
+      const diff = amount - oldItem.amount;
       const targetDebt = state.finances.find(f => f.id === oldItem.targetDebtId);
       if (targetDebt && targetDebt.remaining !== undefined) {
         targetDebt.remaining -= diff;
@@ -1183,27 +1263,24 @@ function openRepayModal(id) {
   document.getElementById("repay-modal").classList.add("active"); 
 }
 
+// 修正 1：防止還款輸入負數或零
 function confirmRepay() {
   const id = document.getElementById("repay-id").value, date = document.getElementById("repay-date").value, amt = Number(document.getElementById("repay-amount").value);
   const item = state.finances.find(f => f.id === id); const rem = item.remaining !== undefined ? item.remaining : item.amount;
-  if (!date || !amt || amt > rem) return alert("金額錯誤！");
+  if (!date || amt <= 0 || amt > rem) return alert("金額錯誤！請輸入大於零的有效金額。");
   item.remaining = rem - amt;
-  // 加入 targetDebtId 來建立關聯
   state.finances.unshift({ id: "fin_repay_" + Date.now(), targetDebtId: id, date, type: item.type === "receivable" ? "income" : "expense", parentCat: item.type === "receivable" ? "💰 工作收入" : "📦 其他", subCat: "還款", amount: amt, notes: document.getElementById("repay-notes").value, isHidden: false });
   saveToStorage(); renderFinances(); closeModal("repay-modal");
 }
 
-// 修正：母子紀錄嚴謹檢查，刪除連帶還款防錯
 function deleteFinanceRecord(id) { 
   const target = state.finances.find(f => f.id === id); 
   if (!target) return;
 
-  // 如果刪除的是母紀錄 (應收/應付)，檢查是否有子還款紀錄
   if (target.type === "receivable" || target.type === "payable") {
     const relatedRepayments = state.finances.filter(f => f.targetDebtId === id);
     if (relatedRepayments.length > 0) {
       if (!confirm("此紀錄包含已還款紀錄，確定要連帶刪除所有關聯的還款紀錄嗎？")) return;
-      // 一併刪除關聯的還款紀錄
       state.finances = state.finances.filter(f => f.targetDebtId !== id);
     } else {
       if (!confirm("確定刪除此紀錄？")) return;
@@ -1212,7 +1289,6 @@ function deleteFinanceRecord(id) {
     if (!confirm("確定刪除此紀錄？")) return;
   }
 
-  // 若刪除的是還款紀錄，則尋找原欠款把它加回去
   if (target.subCat === "還款" && target.targetDebtId) { 
     const m = state.finances.find(f => f.id === target.targetDebtId); 
     if (m && m.remaining !== undefined) m.remaining += target.amount; 
@@ -1224,7 +1300,7 @@ function deleteFinanceRecord(id) {
 }
 
 function renderFinances() {
-  const tbody = document.getElementById("finance-body"); tbody.innerHTML = "";
+  const tbody = document.getElementById("finance-body");
   const selectedMonth = document.getElementById("fin-month-filter").value, sortOrder = document.getElementById("fin-sort-order").value;
   let tE = 0, tI = 0, tR = 0, tP = 0;
 
@@ -1237,18 +1313,22 @@ function renderFinances() {
     if (item.type === "expense") tE += amt; if (item.type === "income") tI += amt;
   });
 
-  const chips = document.getElementById("finance-filter-chips"); chips.innerHTML = `<div class="finance-chip ${financeActiveMode === "all" ? "active" : ""}" onclick="setFinanceAllMode('all')">全部類型</div>`;
+  const chips = document.getElementById("finance-filter-chips"); 
+  let chipsHtml = `<div class="finance-chip ${financeActiveMode === "all" ? "active" : ""}" onclick="setFinanceAllMode('all')">全部類型</div>`;
+  
   const cats = getCategories();
   if (financeActiveMode.startsWith("all")) {
-    Object.keys(cats).forEach(k => getCategoryKeys(k).forEach(p => chips.innerHTML += `<div class="finance-chip" onclick="selectFinanceMainCategory('${p}')">${p}</div>`));
+    Object.keys(cats).forEach(k => getCategoryKeys(k).forEach(p => chipsHtml += `<div class="finance-chip" onclick="selectFinanceMainCategory('${escapeJS(p)}')">${escapeHtml(p)}</div>`));
   } else {
-    chips.innerHTML += `<div class="finance-chip" style="background:var(--primary);color:#fff;" onclick="setFinanceAllMode('all')">◀ 返回</div><div class="finance-chip ${financeActiveSubCat === "all" ? "active" : ""}" onclick="selectFinanceSubCategory('all')">全部 (${financeActiveMainCat})</div>`;
+    chipsHtml += `<div class="finance-chip" style="background:var(--primary);color:#fff;" onclick="setFinanceAllMode('all')">◀ 返回</div><div class="finance-chip ${financeActiveSubCat === "all" ? "active" : ""}" onclick="selectFinanceSubCategory('all')">全部 (${escapeHtml(financeActiveMainCat)})</div>`;
     let subs = []; Object.values(cats).forEach(t => { if(t[financeActiveMainCat]) subs = t[financeActiveMainCat]; });
-    subs.forEach(s => chips.innerHTML += `<div class="finance-chip ${financeActiveSubCat === s ? "active" : ""}" onclick="selectFinanceSubCategory('${s}')">${s}</div>`);
+    subs.forEach(s => chipsHtml += `<div class="finance-chip ${financeActiveSubCat === s ? "active" : ""}" onclick="selectFinanceSubCategory('${escapeJS(s)}')">${escapeHtml(s)}</div>`);
   }
+  chips.innerHTML = chipsHtml;
 
   const lbls = { expense: { n: "支出", c: "tag-expense" }, income: { n: "收入", c: "tag-income" }, transfer: { n: "轉帳", c: "tag-paid" }, receivable: { n: "應收", c: "tag-receivable" }, payable: { n: "應付", c: "tag-payable" } };
   
+  let tbodyHtml = "";
   state.finances.filter(i => {
     if (i.isHidden && !state.showHiddenItems) return false;
     const mo = (i.date||'').slice(0,7), rem = i.remaining !== undefined ? i.remaining : i.amount;
@@ -1262,10 +1342,11 @@ function renderFinances() {
     let ex = ((i.type === "receivable" || i.type === "payable") && rem > 0) ? `<button class="btn btn-warning" style="padding:2px 4px; font-size:0.68rem; margin-right:3px;" onclick="openRepayModal('${i.id}')">還款</button>` : "";
     ex += `<button class="btn ${i.isHidden?'btn-secondary':'btn-warning'}" style="padding:2px 4px; font-size:0.68rem; margin-right:3px;" onclick="toggleRecordHidden('${i.id}')">${i.isHidden?'解除隱藏':'隱藏'}</button><button class="btn btn-secondary" style="padding:2px 4px; font-size:0.68rem; margin-right:3px;" onclick="openFinanceModal('${i.id}')">編輯</button><button class="btn btn-danger" style="padding:2px 4px; font-size:0.68rem;" onclick="deleteFinanceRecord('${i.id}')">刪除</button>`;
     const dAmt = `${(i.type==='income'||i.type==='receivable')?'+':'-'}$${amt.toLocaleString()}${((i.type==='receivable'||i.type==='payable')&&rem>0)?` (未結:$${rem})`:''}`;
-    tbody.innerHTML += `<tr style="${i.isHidden?'opacity:0.55;':''}"><td>${i.date}</td><td><span class="${tl.c}">${tl.n}</span></td><td><strong>${escapeHtml(i.parentCat)}</strong> <span style="color:var(--text-muted);">/ ${escapeHtml(i.subCat)}</span> ${i.isHidden?'<span class="tag-hidden">已隱藏</span>':''}</td><td><strong style="color:${(i.type==='income'||i.type==='receivable')?'#10b981':'#ef4444'};">${dAmt}</strong></td><td>${escapeHtml(i.notes||"-")}</td><td>${ex}</td></tr>`;
+    tbodyHtml += `<tr style="${i.isHidden?'opacity:0.55;':''}"><td>${i.date}</td><td><span class="${tl.c}">${tl.n}</span></td><td><strong>${escapeHtml(i.parentCat)}</strong> <span style="color:var(--text-muted);">/ ${escapeHtml(i.subCat)}</span> ${i.isHidden?'<span class="tag-hidden">已隱藏</span>':''}</td><td><strong style="color:${(i.type==='income'||i.type==='receivable')?'#10b981':'#ef4444'};">${dAmt}</strong></td><td>${escapeHtml(i.notes||"-")}</td><td>${ex}</td></tr>`;
   });
   
-  if(tbody.innerHTML==="") tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:12px;">無紀錄</td></tr>`;
+  if(tbodyHtml==="") tbodyHtml = `<tr><td colspan="6" style="text-align:center; padding:12px;">無紀錄</td></tr>`;
+  tbody.innerHTML = tbodyHtml;
   
   document.getElementById("fin-stat-expense").innerText = `$${tE.toLocaleString()}`; document.getElementById("fin-stat-income").innerText = `$${tI.toLocaleString()}`; document.getElementById("fin-stat-receivable").innerText = `$${tR.toLocaleString()}`; document.getElementById("fin-stat-payable").innerText = `$${tP.toLocaleString()}`;
   document.getElementById("fin-stat-balance").innerText = `$${(tI - tE).toLocaleString()}`; document.getElementById("fin-stat-balance").style.color = (tI - tE) >= 0 ? "#10b981" : "#ef4444";
@@ -1314,13 +1395,18 @@ function deleteRecurringRecord(id) { if (confirm("確定刪除此設定？")) { 
 
 function openCategoryManageModal() { document.getElementById("cat-manage-type").value = "expense"; renderCategoryManageList(); document.getElementById("category-manage-modal").classList.add("active"); }
 function resetCategoriesToDefault() { if(confirm("恢復預設？")) { state.customCategories = JSON.parse(JSON.stringify(DEFAULT_CATEGORIES)); state.categoryOrder = null; saveToStorage(); renderCategoryManageList(); renderFinances(); } }
+
 function renderCategoryManageList() {
-  const t = document.getElementById("cat-manage-type").value, list = document.getElementById("cat-manage-list"), cats = getCategories()[t] || {}; list.innerHTML = "";
+  const t = document.getElementById("cat-manage-type").value, list = document.getElementById("cat-manage-list"), cats = getCategories()[t] || {}; 
+  
+  let listHtml = "";
   getCategoryKeys(t).forEach((p, pi) => {
-    list.innerHTML += `<div style="font-weight:700; font-size:0.80rem; padding:6px; background:var(--table-th-bg); margin-top:4px; display:flex; justify-content:space-between;"><span>${p}</span><div><button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveMain('${t}',${pi},-1)">▲主</button> <button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveMain('${t}',${pi},1)">▼主</button></div></div>`;
-    (cats[p]||[]).forEach((s, si) => { list.innerHTML += `<div class="cat-manage-item"><span>└ ${escapeHtml(s)}</span><div class="cat-manage-actions"><button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveSub('${t}','${p}',${si},-1)">▲</button> <button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveSub('${t}','${p}',${si},1)">▼</button> <button class="btn btn-warning" style="padding:1px 4px; font-size:0.62rem;" onclick="openCatMoveModal('${t}','${p}',${si})">搬移</button> <button class="btn btn-warning" style="padding:1px 4px; font-size:0.62rem;" onclick="openCatMergeModal('${t}','${p}',${si})">合併</button> <button class="btn btn-danger" style="padding:1px 4px; font-size:0.62rem;" onclick="catDelete('${t}','${p}',${si})">刪</button></div></div>`; });
+    listHtml += `<div style="font-weight:700; font-size:0.80rem; padding:6px; background:var(--table-th-bg); margin-top:4px; display:flex; justify-content:space-between;"><span>${escapeHtml(p)}</span><div><button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveMain('${escapeJS(t)}',${pi},-1)">▲主</button> <button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveMain('${escapeJS(t)}',${pi},1)">▼主</button></div></div>`;
+    (cats[p]||[]).forEach((s, si) => { listHtml += `<div class="cat-manage-item"><span>└ ${escapeHtml(s)}</span><div class="cat-manage-actions"><button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveSub('${escapeJS(t)}','${escapeJS(p)}',${si},-1)">▲</button> <button class="btn btn-secondary" style="padding:1px 4px; font-size:0.62rem;" onclick="catMoveSub('${escapeJS(t)}','${escapeJS(p)}',${si},1)">▼</button> <button class="btn btn-warning" style="padding:1px 4px; font-size:0.62rem;" onclick="openCatMoveModal('${escapeJS(t)}','${escapeJS(p)}',${si})">搬移</button> <button class="btn btn-warning" style="padding:1px 4px; font-size:0.62rem;" onclick="openCatMergeModal('${escapeJS(t)}','${escapeJS(p)}',${si})">合併</button> <button class="btn btn-danger" style="padding:1px 4px; font-size:0.62rem;" onclick="catDelete('${escapeJS(t)}','${escapeJS(p)}',${si})">刪</button></div></div>`; });
   });
+  list.innerHTML = listHtml;
 }
+
 function catMoveMain(t, i, d) { const k = getCategoryKeys(t), ti = i+d; if(ti<0 || ti>=k.length) return; const m = k[i]; k.splice(i, 1); k.splice(ti, 0, m); state.categoryOrder[t] = k; saveToStorage(); renderCategoryManageList(); renderFinances(); }
 function catMoveSub(t, p, i, d) { const c = getCategories(), l = c[t][p], ti = i+d; if(ti<0 || ti>=l.length) return; const tmp = l[i]; l[i] = l[ti]; l[ti] = tmp; saveToStorage(); renderCategoryManageList(); renderFinances(); }
 function openAddMainCategoryModal() { document.getElementById("cat-add-main-name").value = ""; document.getElementById("cat-add-main-modal").classList.add("active"); }
@@ -1328,13 +1414,41 @@ function confirmAddMainCategory() { const t = document.getElementById("cat-manag
 function openAddSubCategoryModal() { const t = document.getElementById("cat-manage-type").value, sel = document.getElementById("cat-add-sub-parent"); sel.innerHTML = ""; getCategoryKeys(t).forEach(p => sel.appendChild(new Option(p,p))); document.getElementById("cat-add-sub-name").value = ""; document.getElementById("cat-add-sub-modal").classList.add("active"); }
 function confirmAddSubCategory() { const t = document.getElementById("cat-manage-type").value, p = document.getElementById("cat-add-sub-parent").value, n = document.getElementById("cat-add-sub-name").value.trim(), c = getCategories(); if(!n || !c[t][p] || c[t][p].includes(n)) return; c[t][p].push(n); saveToStorage(); renderCategoryManageList(); closeModal("cat-add-sub-modal"); }
 function openCatMoveModal(t, p, i) { activeCatTask = {t,p,i,s:getCategories()[t][p][i]}; const sel = document.getElementById("cat-move-select"); sel.innerHTML = ""; getCategoryKeys(t).filter(x=>x!==p).forEach(x=>sel.appendChild(new Option(x,x))); document.getElementById("cat-move-modal").classList.add("active"); }
-function confirmCatMove() { const tp = document.getElementById("cat-move-select").value, {t,p,i,s} = activeCatTask, c = getCategories(); c[t][p].splice(i,1); c[t][tp].push(s); saveToStorage(); renderCategoryManageList(); renderFinances(); closeModal("cat-move-modal"); }
+
+function confirmCatMove() { 
+  const tp = document.getElementById("cat-move-select").value;
+  const {t,p,i,s} = activeCatTask;
+  const c = getCategories(); 
+  
+  (state.finances || []).forEach(f => {
+    if (f.type === t && f.parentCat === p && f.subCat === s) f.parentCat = tp;
+  });
+  (state.recurringFinances || []).forEach(r => {
+    if (r.type === t && r.parentCat === p && r.subCat === s) r.parentCat = tp;
+  });
+
+  c[t][p].splice(i,1); c[t][tp].push(s); 
+  saveToStorage(); renderCategoryManageList(); renderFinances(); closeModal("cat-move-modal"); 
+}
+
 function openCatMergeModal(t, p, i) { activeCatTask = {t,p,i,s:getCategories()[t][p][i]}; const sel = document.getElementById("cat-merge-select"); sel.innerHTML = ""; getCategories()[t][p].filter((_,x)=>x!==i).forEach(x=>sel.appendChild(new Option(x,x))); document.getElementById("cat-merge-modal").classList.add("active"); }
-function confirmCatMerge() { const ts = document.getElementById("cat-merge-select").value, {t,p,i,s} = activeCatTask, c = getCategories(); state.finances.forEach(f => {if(f.parentCat===p && f.subCat===s) f.subCat=ts;}); c[t][p].splice(i,1); saveToStorage(); renderCategoryManageList(); renderFinances(); closeModal("cat-merge-modal"); }
+
+// 修正 2：確保合併類別時，同步更新「固定收支」的依賴狀態，防止孤兒類別
+function confirmCatMerge() { 
+  const ts = document.getElementById("cat-merge-select").value, {t,p,i,s} = activeCatTask, c = getCategories(); 
+  state.finances.forEach(f => {if(f.parentCat===p && f.subCat===s) f.subCat=ts;}); 
+  (state.recurringFinances || []).forEach(r => {if(r.parentCat===p && r.subCat===s) r.subCat=ts;});
+  c[t][p].splice(i,1); 
+  saveToStorage(); renderCategoryManageList(); renderFinances(); closeModal("cat-merge-modal"); 
+}
+
 function catDelete(t, p, i) { if(confirm("刪除此子類別？")) { getCategories()[t][p].splice(i,1); saveToStorage(); renderCategoryManageList(); renderFinances(); } }
 
 function closeModal(id) { document.getElementById(id).classList.remove("active"); }
+
 function escapeHtml(text) { return String(text||"").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;"); }
+function escapeJS(text) { return String(text||"").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "\\\""); }
+function escapeHtmlWithBr(text) { return escapeHtml(text).replace(/\n/g, "<br>"); }
 
 // ==========================================
 // UX 體驗改善：點擊背景關閉 Modal
