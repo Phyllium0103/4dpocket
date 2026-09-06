@@ -1223,52 +1223,147 @@ function escapeHtmlWithBr(text) { return escapeHtml(text).replace(/\n/g, "<br>")
 // ========================================================
 // 好友連線與留言板 (無即時更新版)
 // ========================================================
+
 async function sendConnectionRequest() {
   if (!navigator.onLine) return alert("請確認網路連線！");
   if (!supabaseClient || !currentUser) return alert("請先登入雲端帳號！");
   const email = document.getElementById("friend-email-input").value.trim();
   if (!email || email === currentUser.email) return alert("請輸入有效且非自身的 Email");
 
-  const { data: profile } = await supabaseClient.from("profiles").select("id").eq("email", email).single();
-  if (!profile) return alert("找不到此帳號，對方可能尚未註冊。");
+  // 1. 抓取對方 ID (使用 maybeSingle 避免報錯)
+  const { data: profile, error: profileErr } = await supabaseClient.from("profiles").select("id").eq("email", email).maybeSingle();
+  if (profileErr) console.error("搜尋錯誤:", profileErr);
+  if (!profile) return alert("找不到此帳號，對方可能尚未註冊或未登入過本系統。");
 
-  const { data: existing } = await supabaseClient.from("connections").select("*").eq("user_id", currentUser.id).eq("friend_id", profile.id).single();
-  if (existing) return alert("您已經發送過邀請，或雙方已建立連線！");
+  // 2. 檢查是否已經有連線紀錄 (不論誰先加誰)
+  const { data: existing, error: existErr } = await supabaseClient.from("connections")
+    .select("id")
+    .or(`and(user_id.eq.${currentUser.id},friend_id.eq.${profile.id}),and(user_id.eq.${profile.id},friend_id.eq.${currentUser.id})`)
+    .maybeSingle();
+    
+  if (existErr) console.error("檢查連線錯誤:", existErr);
+  if (existing) return alert("您已經發送過邀請，或雙方已存在連線！");
 
-  await supabaseClient.from("connections").insert({ user_id: currentUser.id, friend_id: profile.id, status: 'pending' });
+  // 3. 寫入交友邀請
+  const { error: insertErr } = await supabaseClient.from("connections").insert({ 
+    user_id: currentUser.id, 
+    friend_id: profile.id, 
+    status: 'pending' 
+  });
+  
+  if (insertErr) {
+    console.error("寫入錯誤:", insertErr);
+    return alert("發送失敗，請稍後再試：" + insertErr.message);
+  }
+
   document.getElementById("friend-email-input").value = "";
-  alert("交友邀請已發送！等待對方確認。"); loadConnections();
+  alert("交友邀請已發送！等待對方確認。"); 
+  loadConnections();
 }
 
-async function acceptConnection(connId, requesterId) {
+async function acceptConnection(connId) {
   if (!navigator.onLine) return alert("請確認網路連線！");
-  await supabaseClient.from("connections").update({ status: 'accepted' }).eq("id", connId);
-  await supabaseClient.from("connections").upsert({ user_id: currentUser.id, friend_id: requesterId, status: 'accepted' });
-  alert("已接受好友邀請！"); loadConnections();
+  
+  // 將邀請狀態改為 accepted
+  const { error } = await supabaseClient.from("connections").update({ status: 'accepted' }).eq("id", connId);
+  if (error) return alert("接受失敗：" + error.message);
+  
+  alert("已接受好友邀請！"); 
+  loadConnections();
 }
 
 async function rejectConnection(connId) {
   if (!navigator.onLine) return alert("請確認網路連線！");
-  if (confirm("確定要拒絕此邀請嗎？")) { await supabaseClient.from("connections").delete().eq("id", connId); loadConnections(); }
+  if (confirm("確定要拒絕此邀請嗎？")) { 
+    const { error } = await supabaseClient.from("connections").delete().eq("id", connId);
+    if (error) alert("拒絕失敗：" + error.message);
+    loadConnections(); 
+  }
 }
 
 async function loadConnections() {
-  const listEl = document.getElementById("connections-list"), pendingContainer = document.getElementById("pending-requests-container"), pendingList = document.getElementById("pending-list");
-  if (!navigator.onLine) { listEl.innerHTML = `<div style="text-align:center; color:#ef4444; font-size:0.8rem;">目前離線，無法載入連線資料。</div>`; pendingContainer.style.display = "none"; return; }
-  if (!supabaseClient || !currentUser) { listEl.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.8rem;">請先登入帳號。</div>`; return; }
+  const listEl = document.getElementById("connections-list"), 
+        pendingContainer = document.getElementById("pending-requests-container"), 
+        pendingList = document.getElementById("pending-list");
+        
+  if (!navigator.onLine) { 
+    listEl.innerHTML = `<div style="text-align:center; color:#ef4444; font-size:0.8rem;">目前離線，無法載入連線資料。</div>`; 
+    pendingContainer.style.display = "none"; 
+    return; 
+  }
+  if (!supabaseClient || !currentUser) { 
+    listEl.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.8rem;">請先登入帳號。</div>`; 
+    return; 
+  }
 
   listEl.innerHTML = "資料載入中...";
 
-  const { data: pending } = await supabaseClient.from("connections").select("id, user_id, profiles!connections_user_id_fkey(email)").eq("friend_id", currentUser.id).eq("status", "pending");
+  // ============================================
+  // 1. 載入待確認邀請 (別人加我)
+  // ============================================
+  const { data: pending, error: pErr } = await supabaseClient.from("connections")
+    .select("*")
+    .eq("friend_id", currentUser.id)
+    .eq("status", "pending");
+
+  if (pErr) console.error("載入邀請錯誤:", pErr);
+
   if (pending && pending.length > 0) {
     pendingContainer.style.display = "block";
-    pendingList.innerHTML = pending.map(p => `<div class="connection-card" style="border-color:var(--primary);"><div><b>${escapeHtml(p.profiles.email)}</b> 想加入連線</div><div style="display:flex; gap:6px;"><button class="btn btn-warning" style="padding:4px 8px;" onclick="acceptConnection('${p.id}', '${p.user_id}')">確認</button><button class="btn btn-secondary" style="padding:4px 8px;" onclick="rejectConnection('${p.id}')">拒絕</button></div></div>`).join('');
-  } else { pendingContainer.style.display = "none"; }
+    // 防呆查詢：手動迴圈抓取對方 Email
+    for (let p of pending) {
+      const { data: prof } = await supabaseClient.from("profiles").select("email").eq("id", p.user_id).maybeSingle();
+      p.email = prof ? prof.email : "未知使用者";
+    }
+    
+    pendingList.innerHTML = pending.map(p => `
+      <div class="connection-card" style="border-color:var(--primary);">
+        <div><b>${escapeHtml(p.email)}</b> 想加入連線</div>
+        <div style="display:flex; gap:6px;">
+          <button class="btn btn-warning" style="padding:4px 8px;" onclick="acceptConnection('${p.id}')">確認</button>
+          <button class="btn btn-secondary" style="padding:4px 8px;" onclick="rejectConnection('${p.id}')">拒絕</button>
+        </div>
+      </div>
+    `).join('');
+  } else { 
+    pendingContainer.style.display = "none"; 
+  }
 
-  const { data: accepted } = await supabaseClient.from("connections").select("friend_id, profiles!connections_friend_id_fkey(email)").eq("user_id", currentUser.id).eq("status", "accepted");
-  if (!accepted || accepted.length === 0) { listEl.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.8rem;">目前尚未建立任何連線好友。</div>`; return; }
+  // ============================================
+  // 2. 載入已建立的連線 (雙方都是好友)
+  // ============================================
+  const { data: accepted, error: aErr } = await supabaseClient.from("connections")
+    .select("*")
+    .eq("status", "accepted")
+    .or(`user_id.eq.${currentUser.id},friend_id.eq.${currentUser.id}`);
 
-  listEl.innerHTML = accepted.map(a => `<div class="connection-card"><div style="font-weight:700; word-break:break-all;">${escapeHtml(a.profiles.email)}</div><div style="display:flex; gap:6px;"><button class="btn btn-secondary" style="padding:4px 8px;" onclick="viewFriendSchedule('${a.friend_id}', '${escapeJS(a.profiles.email)}')">看課表</button><button class="btn btn-warning" style="padding:4px 8px;" onclick="openChat('${a.friend_id}', '${escapeJS(a.profiles.email)}')">留言</button></div></div>`).join('');
+  if (aErr) console.error("載入好友錯誤:", aErr);
+
+  if (!accepted || accepted.length === 0) { 
+    listEl.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.8rem;">目前尚未建立任何連線好友。</div>`; 
+    return; 
+  }
+
+  // 防呆查詢：判斷這筆紀錄中，誰才是對方，並抓取他的 Email
+  const friendList = [];
+  for (let a of accepted) {
+    const targetId = (a.user_id === currentUser.id) ? a.friend_id : a.user_id;
+    const { data: prof } = await supabaseClient.from("profiles").select("email").eq("id", targetId).maybeSingle();
+    friendList.push({
+       friend_id: targetId,
+       email: prof ? prof.email : "未知使用者"
+    });
+  }
+
+  listEl.innerHTML = friendList.map(f => `
+    <div class="connection-card">
+      <div style="font-weight:700; word-break:break-all;">${escapeHtml(f.email)}</div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn btn-secondary" style="padding:4px 8px;" onclick="viewFriendSchedule('${f.friend_id}', '${escapeJS(f.email)}')">看課表</button>
+        <button class="btn btn-warning" style="padding:4px 8px;" onclick="openChat('${f.friend_id}', '${escapeJS(f.email)}')">留言</button>
+      </div>
+    </div>
+  `).join('');
 }
 
 async function viewFriendSchedule(friendId, friendEmail) {
@@ -1279,10 +1374,17 @@ async function viewFriendSchedule(friendId, friendEmail) {
   document.getElementById("friend-schedule-modal").classList.add("active");
 
   const { data, error } = await supabaseClient.from("user_schedules").select("data").eq("user_id", friendId).single();
-  if (error || !data || !data.data) { tbody.innerHTML = `<tr><td style="padding:40px; text-align:center; color:var(--text-muted);">無法取得課表。<br>對方可能尚未同步資料，或取消了權限。</td></tr>`; currentFriendState = null; return; }
+  if (error || !data || !data.data) { 
+    console.error("抓取好友課表錯誤:", error);
+    tbody.innerHTML = `<tr><td style="padding:40px; text-align:center; color:var(--text-muted);">無法取得課表。<br>對方可能尚未同步資料，或取消了權限。</td></tr>`; 
+    currentFriendState = null; 
+    return; 
+  }
 
-  currentFriendState = data.data; if (!currentFriendState.schedules) currentFriendState.schedules = [currentFriendState];
-  currentFriendWeekOffset = 0; renderSchedule(currentFriendState, true);
+  currentFriendState = data.data; 
+  if (!currentFriendState.schedules) currentFriendState.schedules = [currentFriendState];
+  currentFriendWeekOffset = 0; 
+  renderSchedule(currentFriendState, true);
 }
 
 async function openChat(friendId, friendEmail) {
@@ -1300,12 +1402,14 @@ async function loadMessages() {
   msgContainer.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.8rem; margin-top:20px;">載入留言中...</div>`;
   const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
   
-  const { data: messages } = await supabaseClient.from("messages")
+  const { data: messages, error } = await supabaseClient.from("messages")
     .select("*")
     .or(`and(sender_id.eq.${currentUser.id},receiver_id.eq.${currentChatFriendId}),and(sender_id.eq.${currentChatFriendId},receiver_id.eq.${currentUser.id})`)
     .gte("created_at", thirtyDaysAgo.toISOString())
     .order("created_at", { ascending: true });
     
+  if (error) console.error("留言讀取錯誤:", error);
+
   msgContainer.innerHTML = "";
   if (!messages || messages.length === 0) { 
     msgContainer.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.75rem; margin-top:10px;">目前尚無留言。<br>在此發送的留言將於 30 天後自動消失。<br><br>※此為非同步留言板，請點擊右上角「↻ 更新留言」查看新訊息。</div>`; 
@@ -1313,8 +1417,10 @@ async function loadMessages() {
   }
   
   messages.forEach(msg => {
-    const isMe = msg.sender_id === currentUser.id, timeStr = new Date(msg.created_at).toLocaleString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const wrapper = document.createElement("div"); wrapper.style = `display:flex; flex-direction:column; width:100%;`;
+    const isMe = msg.sender_id === currentUser.id;
+    const timeStr = new Date(msg.created_at).toLocaleString('zh-TW', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const wrapper = document.createElement("div"); 
+    wrapper.style = `display:flex; flex-direction:column; width:100%;`;
     wrapper.innerHTML = `<div class="chat-bubble ${isMe ? 'me' : 'other'}">${escapeHtml(msg.content)}</div><div class="chat-time" style="${isMe ? 'align-self:flex-end;' : 'align-self:flex-start;'}">${timeStr}</div>`;
     msgContainer.appendChild(wrapper);
   });
@@ -1327,11 +1433,15 @@ async function sendMessage() {
   if (!content || !currentChatFriendId || !currentUser) return;
   input.value = "";
   
-  const { error } = await supabaseClient.from("messages").insert({ sender_id: currentUser.id, receiver_id: currentChatFriendId, content: content });
+  const { error } = await supabaseClient.from("messages").insert({ 
+    sender_id: currentUser.id, 
+    receiver_id: currentChatFriendId, 
+    content: content 
+  });
+  
   if (error) {
     alert("發送失敗：" + error.message);
   } else {
-    // 發送成功後手動更新畫面
     await loadMessages();
   }
 }
