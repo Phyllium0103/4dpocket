@@ -17,7 +17,6 @@ h1 { font-size: 1.15rem; font-weight: 800; color: var(--text); letter-spacing: -
 .week-nav-btns { display: flex; align-items: center; gap: 4px; }
 .week-display { font-weight: 700; font-size: 0.80rem; color: var(--text); }
 
-/* 死線倒數看板樣式 (隨主題變化) */
 .deadline-banner { background: var(--student-stat-bg); border: 1px solid var(--student-stat-border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; transition: background 0.2s, border-color 0.2s; }
 .deadline-header { padding: 8px 10px; display: flex; justify-content: space-between; align-items: flex-start; cursor: pointer; color: var(--student-stat-text); transition: color 0.2s; }
 .deadline-list { display: none; padding: 0 10px 8px 10px; border-top: 1px dashed var(--student-stat-border); transition: border-color 0.2s; }
@@ -57,10 +56,7 @@ th.today-header { background: var(--today-header-bg); color: var(--today-header-
 .memo-badge { position: absolute; top: 2px; right: 2px; background: #fbbf24; color: #78350f; font-size: 0.55rem; padding: 1px 3px; border-radius: 3px; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
 
 .col-overlay-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
-
-.tutoring-float-card {
-  position: absolute; left: 2px; right: 2px; pointer-events: auto; border-radius: 6px; padding: 3px 4px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; overflow: hidden; z-index: 12; line-height: 1.2;
-}
+.tutoring-float-card { position: absolute; left: 2px; right: 2px; pointer-events: auto; border-radius: 6px; padding: 3px 4px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; overflow: hidden; z-index: 12; line-height: 1.2; }
 .tutoring-float-card.is-tutoring, .tutoring-float-card.is-work { border: none; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
 .tutoring-float-card.is-override-temp { border: 2px solid var(--primary); border-radius: 6px; box-shadow: 0 3px 8px rgba(0,0,0,0.15), inset 0 0 0 1px var(--card-bg); justify-content: center; }
 
@@ -98,7 +94,6 @@ th.today-header { background: var(--today-header-bg); color: var(--today-header-
 .stat-title { font-size: 0.65rem; color: var(--text-muted); margin-bottom: 2px; }
 .stat-val { font-size: 0.90rem; font-weight: 700; color: var(--primary); }
 
-/* 圖表展開區塊 */
 .expense-chart-container { display: none; background: var(--stat-card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
 .expense-chart-container.active { display: block; }
 .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; margin-bottom: 4px; }
@@ -140,3 +135,12 @@ th.today-header { background: var(--today-header-bg); color: var(--today-header-
 .period-edit-table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 0.75rem; }
 .period-edit-table th, .period-edit-table td { padding: 4px 6px; border: 1px solid var(--border); }
 .period-edit-table input { padding: 3px; border-radius: 4px; border: 1px solid var(--border); width: 100%; font-size: 0.75rem; background: var(--input-bg); color: var(--text); }
+
+/* 好友連線與留言板 UI 樣式 */
+.connections-panel { background: var(--card-bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); display: none; }
+.connection-card { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--table-th-bg); font-size: 0.8rem; transition: transform 0.1s; }
+.connection-card:active { transform: scale(0.98); }
+.chat-bubble { max-width: 85%; padding: 8px 12px; border-radius: 14px; font-size: 0.85rem; line-height: 1.4; word-break: break-all; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.chat-bubble.me { align-self: flex-end; background: var(--primary); color: #ffffff; border-bottom-right-radius: 2px; }
+.chat-bubble.other { align-self: flex-start; background: var(--card-bg); border: 1px solid var(--border); color: var(--text); border-bottom-left-radius: 2px; }
+.chat-time { font-size: 0.65rem; color: var(--text-muted); margin-top: 3px; }
