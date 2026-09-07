@@ -61,7 +61,8 @@ th.today-header { background: var(--today-header-bg); color: var(--today-header-
 .tutoring-float-card {
   position: absolute; left: 2px; right: 2px; pointer-events: auto; border-radius: 6px; padding: 3px 4px; cursor: pointer; display: flex; flex-direction: column; justify-content: center; overflow: hidden; z-index: 12; line-height: 1.2;
 }
-.tutoring-float-card.is-tutoring, .tutoring-float-card.is-work { border: none; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+/* 此處加入了 .is-school 的支援 */
+.tutoring-float-card.is-tutoring, .tutoring-float-card.is-work, .tutoring-float-card.is-school { border: none; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
 .tutoring-float-card.is-override-temp { border: 2px solid var(--primary); border-radius: 6px; box-shadow: 0 3px 8px rgba(0,0,0,0.15), inset 0 0 0 1px var(--card-bg); justify-content: center; }
 
 .evening-row td, .noon-row td { background: var(--card-bg); vertical-align: middle; }

@@ -7,7 +7,6 @@ const SUPABASE_ANON_KEY = "sb_publishable_-xqiL_LXkK2pWt5UopJ5Nw__OxyEmOH";
 let supabaseClient = null;
 let currentUser = null;
 
-// 修正 4：防護 Supabase SDK 未載入導致全站癱瘓的問題
 if (typeof supabase !== 'undefined' && SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 5) {
   supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 } else {
@@ -18,7 +17,6 @@ function triggerHaptic(duration = 20) {
   if (navigator.vibrate) navigator.vibrate(duration);
 }
 
-// 防護使用者在同步期間離開
 let isSaving = false;
 window.addEventListener('beforeunload', (e) => {
   if (isSaving) {
@@ -61,7 +59,8 @@ const initialDefaultPeriods = [
   { id: 9, name: "第九節", start: "17:10", end: "18:00", optional: true }, { id: 10, name: "第十節", start: "18:10", end: "19:00", optional: true }
 ];
 
-const CELL_HEIGHT = 56;
+// 將 CELL_HEIGHT 設為 57 以完美匹配「56px高度 + 1px框線」的 DOM 渲染
+const CELL_HEIGHT = 57;
 
 // ========================================================
 // 預設資料狀態與全域變數
@@ -71,6 +70,7 @@ function createDefaultState() {
   return {
     themeMode: "light", themeStyle: "light-swiss-blue", lastLightStyle: "light-swiss-blue", lastDarkStyle: "dark-tokyo-night",
     isEditMode: false, showLatePeriods: false, showTutoring: false, showDeadlines: true, textAlign: "center",
+    is24HourMode: false, 
     billings: [], workBillings: [], finances: [], recurringFinances: [], 
     customCategories: null, categoryOrder: null, showHiddenItems: false,
     activeScheduleId: defaultSchId,
@@ -135,7 +135,6 @@ function getCategoryKeys(type) {
   return state.categoryOrder[type];
 }
 
-// 修正 6：建立一致的日期解析函式，避免跨時區解析錯誤
 function parseLocalDate(dateStr) {
   if (!dateStr) return new Date();
   return new Date(dateStr.replace(/-/g, '/'));
@@ -143,21 +142,35 @@ function parseLocalDate(dateStr) {
 
 function timeToMinutes(timeStr) { if (!timeStr) return 0; const [h, m] = timeStr.split(":").map(Number); return (h || 0) * 60 + (m || 0); }
 function isDaytimeSlot(startTime, endTime) { const startMin = timeToMinutes(startTime), endMin = timeToMinutes(endTime), dayStart = 8 * 60, dayEnd = 17 * 60; return (startMin >= dayStart && startMin <= dayEnd) || (endMin >= dayStart && endMin <= dayEnd); }
-function timeToPixelOffset(timeMins, periods) {
+
+// 加入 hasNoonEvents 的判定，確保午休時間的渲染高度能精準偏移
+function timeToPixelOffset(timeMins, periods, hasNoon = false) {
   if (!periods || periods.length === 0) return 0;
-  const firstStart = timeToMinutes(periods[0].start); if (timeMins <= firstStart) return 0;
+  const firstStart = timeToMinutes(periods[0].start); 
+  if (timeMins <= firstStart) return 0;
+  
   for (let i = 0; i < periods.length; i++) {
-    const pStart = timeToMinutes(periods[i].start), pEnd = timeToMinutes(periods[i].end);
-    if (timeMins >= pStart && timeMins <= pEnd) return i * CELL_HEIGHT + ((timeMins - pStart) / (pEnd - pStart || 1)) * CELL_HEIGHT;
+    const pStart = timeToMinutes(periods[i].start);
+    const pEnd = timeToMinutes(periods[i].end);
+    
+    let currentNoonOffset = (hasNoon && periods[i].id >= 5) ? CELL_HEIGHT : 0;
+
+    if (timeMins >= pStart && timeMins <= pEnd) {
+      return i * CELL_HEIGHT + currentNoonOffset + ((timeMins - pStart) / (pEnd - pStart || 1)) * CELL_HEIGHT;
+    }
+    
     if (i < periods.length - 1) {
       const nextStart = timeToMinutes(periods[i + 1].start);
-      if (timeMins > pEnd && timeMins < nextStart) return (i + 1) * CELL_HEIGHT - (1 - ((timeMins - pEnd) / (nextStart - pEnd || 1))) * 2;
+      if (timeMins > pEnd && timeMins < nextStart) {
+         let nextNoonOffset = (hasNoon && periods[i + 1].id >= 5) ? CELL_HEIGHT : 0;
+         return (i + 1) * CELL_HEIGHT + nextNoonOffset;
+      }
     }
   }
-  return periods.length * CELL_HEIGHT;
+  let finalNoonOffset = hasNoon ? CELL_HEIGHT : 0;
+  return periods.length * CELL_HEIGHT + finalNoonOffset;
 }
 
-// 修正 3：改善 DOM 重繪效能，直接從 documentElement 取得變數
 function getComputedThemeColor(variableName) { 
   return getComputedStyle(document.documentElement).getPropertyValue(variableName).trim(); 
 }
@@ -266,7 +279,7 @@ async function checkAuthSession() {
 
 function updateUserUI(isLoggedIn, email = "") {
   const dot = document.getElementById("sync-dot"), text = document.getElementById("sync-user-text"), btn = document.getElementById("btn-auth-action");
-  text.style.color = "inherit"; // 修正：重置顏色
+  text.style.color = "inherit";
   if (isLoggedIn) { dot.className = "status-dot online"; text.innerText = `已同步: ${email}`; btn.innerText = "登出"; btn.onclick = handleAuthLogout; }
   else { dot.className = "status-dot"; text.innerText = "未登入 (離線)"; btn.innerText = "登入 / 註冊"; btn.onclick = openAuthModal; }
 }
@@ -293,7 +306,6 @@ async function handleAuthLogout() {
   if (confirm("確定登出？")) { await supabaseClient.auth.signOut(); currentUser = null; updateUserUI(false); }
 }
 
-// 修正 5：檢查 Supabase 寫入是否真的成功並回傳結果
 async function pushCloudData() {
   if (!supabaseClient || !currentUser) return false;
   try { 
@@ -350,7 +362,6 @@ async function saveToStorage() {
     console.error("Storage/Cloud sync error:", e);
   } finally {
     isSaving = false;
-    // 修正 5：正確顯示雲端儲存狀態
     if (syncText) {
       if (currentUser) {
         syncText.innerText = syncSuccess ? `已同步: ${currentUser.email}` : "同步失敗 / 請檢查網路";
@@ -363,11 +374,25 @@ async function saveToStorage() {
   }
 }
 
-function toggleEditMode() { triggerHaptic(25); state.isEditMode = !state.isEditMode; updateEditModeBtn(); saveToStorage(); }
+function toggleEditMode() { triggerHaptic(25); state.isEditMode = !state.isEditMode; updateEditModeBtn(); saveToStorage(); renderSchedule(); }
 function updateEditModeBtn() {
   const btn = document.getElementById("btn-edit-mode-toggle"); if (!btn) return;
   if (state.isEditMode) { btn.innerHTML = "編輯中"; btn.className = "btn btn-warning btn-edit-mode"; }
   else { btn.innerHTML = "唯讀模式"; btn.className = "btn btn-secondary"; }
+}
+
+function toggle24HourMode() { 
+  triggerHaptic(25); 
+  state.is24HourMode = !state.is24HourMode; 
+  update24HourModeBtn(); 
+  saveToStorage(); 
+  renderSchedule(); 
+}
+
+function update24HourModeBtn() {
+  const btn = document.getElementById("btn-24h-mode-toggle"); if (!btn) return;
+  if (state.is24HourMode) { btn.innerHTML = "節次模式"; btn.className = "btn btn-warning"; }
+  else { btn.innerHTML = "24小時模式"; btn.className = "btn btn-secondary"; }
 }
 
 function initThemeDropdown() {
@@ -488,7 +513,7 @@ function init() {
   if (!document.getElementById("bill-month-filter").value) document.getElementById("bill-month-filter").value = ym;
   if (!document.getElementById("fin-month-filter").value) document.getElementById("fin-month-filter").value = ym;
 
-  updateEditModeBtn(); updatePresetDropdowns(); checkRecurringFinances();
+  updateEditModeBtn(); update24HourModeBtn(); updatePresetDropdowns(); checkRecurringFinances();
   renderSchedule(); renderBillings(); renderFinances(); checkAuthSession();
 }
 
@@ -707,6 +732,219 @@ function removeSchoolDeadline(idx) { tempDeadlines.splice(idx, 1); renderModalDe
 // 渲染課表
 // ==========================================
 function renderSchedule() {
+  if (state.is24HourMode) {
+    render24HourSchedule();
+  } else {
+    renderOriginalSchedule();
+  }
+}
+
+function render24HourSchedule() {
+  try {
+    const sch = getActiveSchedule(), monday = getMondayOfWeek(new Date(), currentWeekOffset);
+    const maxDays = state.showTutoring ? 7 : 5, rangeEnd = new Date(monday); rangeEnd.setDate(monday.getDate() + (maxDays - 1));
+    const weekKey = getWeekKey(new Date()), alignClass = `align-${state.textAlign || "center"}`;
+
+    document.getElementById("week-range-text").innerText = `${monday.getFullYear()} 年 ${formatShortDate(monday)} ~ ${formatShortDate(rangeEnd)}`;
+    document.getElementById("schedule-footer-banner").innerHTML = `📅 ${escapeHtml(sch.title)} (${formatSlashDate(sch.startDate)} ~ ${formatSlashDate(sch.endDate)}) <span style="font-size:0.68rem; color:var(--primary); font-weight:600; margin-left:6px;">[切換/新增]</span>`;
+
+    const tableEl = document.getElementById("schedule-table");
+    if (tableEl) tableEl.style.width = state.showTutoring ? "calc(68px + (100% - 68px) / 5 * 7)" : "100%";
+
+    const thead = document.getElementById("schedule-head"); thead.innerHTML = "";
+    const headTr = document.createElement("tr"); headTr.innerHTML = `<th class="col-time">時間</th>`;
+    const dayNames = ["", "週一", "週二", "週三", "週四", "週五", "週六", "週日"], todayStr = formatDate(new Date()), weekDates = [];
+
+    for (let i = 0; i < maxDays; i++) {
+      const curDate = new Date(monday); curDate.setDate(monday.getDate() + i);
+      const dateStr = formatDate(curDate); weekDates.push(dateStr);
+      const th = document.createElement("th"); if (dateStr === todayStr) th.className = "today-header";
+      th.innerHTML = `<div>${dayNames[i + 1]}</div><div style="font-size:0.62rem; font-weight:normal;">${formatShortDate(curDate)}</div>`;
+      headTr.appendChild(th);
+    }
+    thead.appendChild(headTr);
+
+    const tbody = document.getElementById("schedule-body"); tbody.innerHTML = "";
+    const schStart = parseLocalDate(sch.startDate || "2026-09-07"), schEnd = parseLocalDate(sch.endDate || "2027-01-10");
+    schStart.setHours(0,0,0,0); schEnd.setHours(23,59,59,999);
+
+    if (rangeEnd < schStart || monday > schEnd) {
+      tbody.innerHTML = `<tr><td colspan="${maxDays + 1}" style="text-align:center; padding:45px 15px; color:var(--text-muted); font-size:0.82rem;">⚠️ 本週不在當前課表有效範圍內。<br><span style="font-size:0.72rem; color:var(--primary);">請切換課表或調整時間範圍。</span></td></tr>`;
+      renderDeadlinesBanner(); return;
+    }
+    renderDeadlinesBanner();
+
+    const periods24 = Array.from({length: 24}, (_, i) => ({ 
+      id: `h${i}`, name: `${i}:00`, 
+      start: `${String(i).padStart(2, '0')}:00`, 
+      end: `${String(i + 1).padStart(2, '0')}:00` 
+    }));
+    
+    const currentWeekTempEvents = (sch.temporaryEvents || []).filter((t) => t.weekKey === weekKey);
+    const currentWeekWorks = (sch.works || []).filter((w) => w.type !== "weekly" || w.weekKey === weekKey);
+    const overriddenSourceIds = new Set((sch.overrides || []).map((o) => o.sourceId));
+    const overriddenCourseKeys = new Set((sch.overrides || []).filter((o) => o.type === "school").map((o) => o.sourceKey));
+
+    periods24.forEach((p, pIdx) => {
+      const tr = document.createElement("tr");
+      const timeTh = document.createElement("td");
+      timeTh.className = "col-time"; 
+      timeTh.innerHTML = `<div>${escapeHtml(p.name)}</div>`; 
+      tr.appendChild(timeTh);
+
+      for (let d = 1; d <= maxDays; d++) {
+        const td = document.createElement("td");
+        const currentCellDateStr = weekDates[d - 1];
+        const wrapper = document.createElement("div"); wrapper.className = "table-col-wrapper";
+        const slotDiv = document.createElement("div"); slotDiv.className = "cell-slot";
+        slotDiv.innerHTML = `<span style="color:transparent; font-size:0.75rem;">+</span>`;
+        wrapper.appendChild(slotDiv);
+
+        if (pIdx === 0) {
+          const overlayContainer = document.createElement("div"); 
+          overlayContainer.className = "col-overlay-container";
+          overlayContainer.style.height = `${24 * CELL_HEIGHT}px`;
+
+          const renderList = [];
+          
+          const prevCellDateObj = new Date(monday);
+          prevCellDateObj.setDate(monday.getDate() + (d - 1) - 1);
+          const prevCellDateStr = formatDate(prevCellDateObj);
+          const prevD = d === 1 ? 7 : d - 1;
+
+          // 核心跨夜切分與佈局邏輯
+          const addSegments = (item, itemDay, itemDate, clickFn, getInnerHtml, defBgVar, defTextVar, itemType) => {
+              const sm = timeToMinutes(item.startTime || "00:00");
+              const em = timeToMinutes(item.endTime || "00:00");
+              const isCross = sm > em; 
+
+              let segments = [];
+              if (itemDate !== undefined) {
+                  if (itemDate === currentCellDateStr && !isCross) segments.push({ ...item });
+                  if (itemDate === currentCellDateStr && isCross) segments.push({ ...item, endTime: "24:00", isStartSegment: true });
+                  if (itemDate === prevCellDateStr && isCross) segments.push({ ...item, startTime: "00:00", isEndSegment: true });
+              } else {
+                  if (Number(itemDay) === d && !isCross) segments.push({ ...item });
+                  if (Number(itemDay) === d && isCross) segments.push({ ...item, endTime: "24:00", isStartSegment: true });
+                  if (Number(itemDay) === prevD && isCross) segments.push({ ...item, startTime: "00:00", isEndSegment: true });
+              }
+
+              segments.forEach(seg => {
+                  renderList.push({
+                      color: seg.color, startTime: seg.startTime, endTime: seg.endTime, 
+                      itemType: itemType, clickFn: () => clickFn(item.id), 
+                      innerHtml: getInnerHtml(seg), defBgVar, defTextVar,
+                      isStartSegment: seg.isStartSegment, isEndSegment: seg.isEndSegment
+                  });
+              });
+          };
+
+          // 1. 學校正規課程 (自動合併連續同名課程)
+          const dayCourses = [];
+          (sch.periods || initialDefaultPeriods).forEach(sp => {
+              const key = `${d}_${sp.id}`;
+              const course = sch.courses ? sch.courses[key] : null;
+              if (course && course.name && !overriddenCourseKeys.has(key)) {
+                  dayCourses.push({ sp: { ...sp }, course, key });
+              }
+          });
+          const mergedCourses = [];
+          dayCourses.forEach(curr => {
+              if (mergedCourses.length > 0) {
+                  const last = mergedCourses[mergedCourses.length - 1];
+                  if (last.course.name === curr.course.name) {
+                      last.sp.end = curr.sp.end; // 同名且接續，自動合併
+                      return;
+                  }
+              }
+              mergedCourses.push(curr);
+          });
+          mergedCourses.forEach(item => {
+              renderList.push({ 
+                  color: item.course.color, startTime: item.sp.start, endTime: item.sp.end, itemType: 'is-school', 
+                  clickFn: () => handleSlotClick(d, item.sp.id), 
+                  innerHtml: `${(sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`school_${item.key}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(item.course.name)}</div>${item.course.room ? `<div class="item-sub">${escapeHtml(item.course.room)}</div>` : ""}`, 
+                  defBgVar: '--school-def-bg', defTextVar: '--school-def-text' 
+              });
+          });
+
+          // 2. 家教
+          (sch.tutorings || []).forEach(t => {
+              if (overriddenSourceIds.has(t.id)) return;
+              addSegments(t, t.day, undefined, handleTutoringClick, 
+                  (seg) => `${(sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`tut_${t.id}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(t.student)}</div><div class="item-sub">${escapeHtml(seg.startTime)}</div><div class="item-sub">${escapeHtml(seg.endTime)}</div>`, 
+                  '--tutoring-def-bg', '--tutoring-def-text', 'is-tutoring');
+          });
+
+          // 3. 工作
+          currentWeekWorks.forEach(w => {
+              if (overriddenSourceIds.has(w.id)) return;
+              addSegments(w, w.day, undefined, handleWorkClick, 
+                  (seg) => `<div class="item-title">${escapeHtml(w.name)}</div><div class="item-sub">${escapeHtml(seg.startTime)}</div><div class="item-sub">${escapeHtml(seg.endTime)}</div>`, 
+                  '--work-def-bg', '--work-def-text', 'is-work');
+          });
+
+          // 4. Overrides
+          (sch.overrides || []).forEach(o => {
+              addSegments(o, undefined, o.targetDate, handleOverrideClick, 
+                  (seg) => `<div class="item-title">${escapeHtml(o.title)}</div>`, 
+                  '--override-temp-def-bg', '--override-temp-def-text', 'is-override-temp');
+          });
+
+          // 5. 臨時事件
+          currentWeekTempEvents.forEach(t => {
+              let st = t.startTime, et = t.endTime;
+              if (t.slotType === "noon") { st = "12:00"; et = "13:00"; }
+              if (t.slotType === "period") {
+                  const spObj = (sch.periods || initialDefaultPeriods).find(p => String(p.id) === String(t.periodId));
+                  if (spObj) { st = spObj.start; et = spObj.end; }
+              }
+              const proxyItem = { ...t, startTime: st || "12:00", endTime: et || "13:00" };
+              addSegments(proxyItem, t.day, undefined, handleTempEventClick, 
+                  (seg) => `<div class="item-title">${escapeHtml(t.title)}</div>${t.location ? `<div class="item-sub">${escapeHtml(t.location)}</div>` : ""}`, 
+                  '--override-temp-def-bg', '--override-temp-def-text', 'is-override-temp');
+          });
+
+          // 開始繪製
+          renderList.forEach(item => {
+              const sm = timeToMinutes(item.startTime);
+              const em = timeToMinutes(item.endTime === "24:00" ? "24:00" : item.endTime); 
+              
+              const topPx = timeToPixelOffset(sm, periods24);
+              const bottomPx = timeToPixelOffset(em, periods24);
+              
+              let cardTop = topPx + 2; 
+              let cardHeight = Math.max(bottomPx - topPx, 20) - 4;
+              let radiusStyle = "";
+              
+              if (item.isStartSegment) {
+                  radiusStyle = "border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: none;";
+                  cardHeight = bottomPx - topPx - 2; 
+              }
+              if (item.isEndSegment) {
+                  radiusStyle = "border-top-left-radius: 0; border-top-right-radius: 0; border-top: none;";
+                  cardTop = topPx; 
+                  cardHeight = bottomPx - topPx - 2; 
+              }
+
+              const floatCard = document.createElement("div"); 
+              floatCard.className = `tutoring-float-card ${item.itemType} ${alignClass}`;
+              floatCard.style = `${item.color ? `background-color: ${item.color}; color: ${getTextColorForBg(item.color)};` : `background-color: var(${item.defBgVar}); color: var(${item.defTextVar});`} top: ${cardTop}px; height: ${cardHeight}px; ${radiusStyle}`;
+              floatCard.onclick = (e) => { e.stopPropagation(); item.clickFn(); };
+              floatCard.innerHTML = item.innerHtml; 
+              overlayContainer.appendChild(floatCard);
+          });
+
+          wrapper.appendChild(overlayContainer);
+        }
+        td.appendChild(wrapper); tr.appendChild(td);
+      }
+      tbody.appendChild(tr);
+    });
+  } catch (err) { console.error("Render 24h schedule error:", err); }
+}
+
+function renderOriginalSchedule() {
   try {
     const sch = getActiveSchedule(), monday = getMondayOfWeek(new Date(), currentWeekOffset);
     const maxDays = state.showTutoring ? 7 : 5, rangeEnd = new Date(monday); rangeEnd.setDate(monday.getDate() + (maxDays - 1));
@@ -748,6 +986,14 @@ function renderSchedule() {
     const hasNoonEvents = currentWeekTempEvents.some((t) => t.slotType === "noon");
     const currentWeekWorks = (sch.works || []).filter((w) => w.type !== "weekly" || w.weekKey === weekKey);
 
+    const lastPeriodEndMins = periodsToRender.length > 0 ? timeToMinutes(periodsToRender[periodsToRender.length - 1].end) : 17 * 60;
+    
+    const overlapsDaytime = (st, et) => timeToMinutes(st) < lastPeriodEndMins;
+    const overlapsEvening = (st, et) => {
+        const sm = timeToMinutes(st), em = timeToMinutes(et);
+        return sm > em || em > lastPeriodEndMins; 
+    };
+
     periodsToRender.forEach((p, pIdx) => {
       const tr = document.createElement("tr"), timeTh = document.createElement("td");
       timeTh.className = "col-time"; 
@@ -779,19 +1025,40 @@ function renderSchedule() {
 
           const renderFloat = (list, itemType, getInnerHtml, defBgVar, defTextVar) => {
             list.forEach(item => {
-              const topPx = timeToPixelOffset(timeToMinutes(item.startTime), periodsToRender);
-              const bottomPx = timeToPixelOffset(timeToMinutes(item.endTime), periodsToRender);
+              const sm = timeToMinutes(item.startTime);
+              let em = timeToMinutes(item.endTime);
+              if (sm > em) em = 24 * 60; 
+              
+              const topPx = timeToPixelOffset(sm, periodsToRender, hasNoonEvents);
+              const bottomPx = timeToPixelOffset(em, periodsToRender, hasNoonEvents);
+              
+              const extendsToEvening = em > lastPeriodEndMins;
+              let cardTop = topPx + 2;
+              let cardHeight = Math.max(bottomPx - topPx, 20) - 4;
+              let radiusStyle = "";
+
+              if (extendsToEvening) {
+                  if (state.showTutoring) {
+                      // 改為一體成型覆蓋到夜間區塊，文字才能整體置中且不重複
+                      cardHeight = (bottomPx - topPx) + CELL_HEIGHT - 4; 
+                      radiusStyle = "z-index: 15;";
+                  } else {
+                      // 若未開啟夜間區塊，則切平底部
+                      radiusStyle = "border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-width: 0; box-shadow: 0 -1px 2px rgba(0,0,0,0.06); z-index: 15;";
+                  }
+              }
+
               const floatCard = document.createElement("div"); floatCard.className = `tutoring-float-card ${itemType} ${alignClass}`;
-              floatCard.style = `${item.color ? `background-color: ${item.color}; color: ${getTextColorForBg(item.color)};` : `background-color: var(${defBgVar}); color: var(${defTextVar});`} top: ${topPx + 2}px; height: ${Math.max(bottomPx - topPx, 28) - 4}px;`;
+              floatCard.style = `${item.color ? `background-color: ${item.color}; color: ${getTextColorForBg(item.color)};` : `background-color: var(${defBgVar}); color: var(${defTextVar});`} top: ${cardTop}px; height: ${cardHeight}px; ${radiusStyle}`;
               floatCard.onclick = (e) => { e.stopPropagation(); item.clickFn(item.id); };
               floatCard.innerHTML = getInnerHtml(item); overlayContainer.appendChild(floatCard);
             });
           };
 
-          renderFloat((sch.tutorings || []).filter((t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && isDaytimeSlot(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTutoringClick})), "is-tutoring", (t) => `${(sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`tut_${t.id}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(t.student)}</div><div class="item-sub">${escapeHtml(t.startTime)}</div><div class="item-sub">${escapeHtml(t.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
-          renderFloat(currentWeekWorks.filter((w) => Number(w.day) === d && !overriddenSourceIds.has(w.id) && isDaytimeSlot(w.startTime, w.endTime)).map(w => ({...w, clickFn: handleWorkClick})), "is-work", (w) => `<div class="item-title">${escapeHtml(w.name)}</div><div class="item-sub">${escapeHtml(w.startTime)}</div><div class="item-sub">${escapeHtml(w.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
-          renderFloat((sch.overrides || []).filter((o) => o.targetDate === currentCellDate && isDaytimeSlot(o.startTime, o.endTime)).map(o => ({...o, clickFn: handleOverrideClick})), "is-override-temp", (o) => `<div class="item-title">${escapeHtml(o.title)}</div>`, "--override-temp-def-bg", "--override-temp-def-text");
-          renderFloat(currentWeekTempEvents.filter((t) => Number(t.day) === d && isDaytimeSlot(t.startTime, t.endTime) && t.slotType !== "noon").map(t => ({...t, clickFn: handleTempEventClick})), "is-override-temp", (t) => `<div class="item-title">${escapeHtml(t.title)}</div>${t.location ? `<div class="item-sub">${escapeHtml(t.location)}</div>` : ""}`, "--override-temp-def-bg", "--override-temp-def-text");
+          renderFloat((sch.tutorings || []).filter((t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && overlapsDaytime(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTutoringClick})), "is-tutoring", (t) => `${(sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`tut_${t.id}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(t.student)}</div><div class="item-sub">${escapeHtml(t.startTime)}</div><div class="item-sub">${escapeHtml(t.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
+          renderFloat(currentWeekWorks.filter((w) => Number(w.day) === d && !overriddenSourceIds.has(w.id) && overlapsDaytime(w.startTime, w.endTime)).map(w => ({...w, clickFn: handleWorkClick})), "is-work", (w) => `<div class="item-title">${escapeHtml(w.name)}</div><div class="item-sub">${escapeHtml(w.startTime)}</div><div class="item-sub">${escapeHtml(w.endTime)}</div>`, "--work-def-bg", "--work-def-text");
+          renderFloat((sch.overrides || []).filter((o) => o.targetDate === currentCellDate && overlapsDaytime(o.startTime, o.endTime)).map(o => ({...o, clickFn: handleOverrideClick})), "is-override-temp", (o) => `<div class="item-title">${escapeHtml(o.title)}</div>`, "--override-temp-def-bg", "--override-temp-def-text");
+          renderFloat(currentWeekTempEvents.filter((t) => Number(t.day) === d && t.slotType !== "noon" && overlapsDaytime(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTempEventClick})), "is-override-temp", (t) => `<div class="item-title">${escapeHtml(t.title)}</div>${t.location ? `<div class="item-sub">${escapeHtml(t.location)}</div>` : ""}`, "--override-temp-def-bg", "--override-temp-def-text");
 
           wrapper.appendChild(overlayContainer);
         }
@@ -828,16 +1095,23 @@ function renderSchedule() {
 
         const renderEvening = (list, itemType, getInnerHtml, defBgVar, defTextVar) => {
           list.forEach(item => {
-            hasContent = true; const card = document.createElement("div"); card.className = `evening-card ${itemType} ${alignClass}`;
-            card.style = item.color ? `background-color: ${item.color}; color: ${getTextColorForBg(item.color)};` : `background-color: var(${defBgVar}); color: var(${defTextVar});`;
+            hasContent = true; 
+            const sm = timeToMinutes(item.startTime);
+            const extendsFromDaytime = sm < lastPeriodEndMins;
+            
+            // 白天區塊已一體成型延伸覆蓋，此處僅作為隱形佔位符維持排版高度
+            let radiusStyle = extendsFromDaytime ? "opacity: 0; pointer-events: none;" : "";
+
+            const card = document.createElement("div"); card.className = `evening-card ${itemType} ${alignClass}`;
+            card.style = item.color ? `background-color: ${item.color}; color: ${getTextColorForBg(item.color)}; ${radiusStyle}` : `background-color: var(${defBgVar}); color: var(${defTextVar}); ${radiusStyle}`;
             card.onclick = (e) => { e.stopPropagation(); item.clickFn(item.id); }; card.innerHTML = getInnerHtml(item); eveningCell.appendChild(card);
           });
         };
 
-        renderEvening((sch.tutorings || []).filter((t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && !isDaytimeSlot(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTutoringClick})), "is-tutoring", (t) => `${(sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`tut_${t.id}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(t.student)}</div><div class="item-sub">${escapeHtml(t.startTime)}</div><div class="item-sub">${escapeHtml(t.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
-        renderEvening(currentWeekWorks.filter((w) => Number(w.day) === d && !overriddenSourceIds.has(w.id) && !isDaytimeSlot(w.startTime, w.endTime)).map(w => ({...w, clickFn: handleWorkClick})), "is-work", (w) => `<div class="item-title">${escapeHtml(w.name)}</div><div class="item-sub">${escapeHtml(w.startTime)}</div><div class="item-sub">${escapeHtml(w.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
-        renderEvening((sch.overrides || []).filter((o) => o.targetDate === currentCellDate && !isDaytimeSlot(o.startTime, o.endTime)).map(o => ({...o, clickFn: handleOverrideClick})), "is-override-temp", (o) => `<div class="item-title">${escapeHtml(o.title)}</div>`, "--override-temp-def-bg", "--override-temp-def-text");
-        renderEvening(currentWeekTempEvents.filter((t) => Number(t.day) === d && !isDaytimeSlot(t.startTime, t.endTime) && t.slotType !== "noon").map(t => ({...t, clickFn: handleTempEventClick})), "is-override-temp", (t) => `<div class="item-title">${escapeHtml(t.title)}</div>`, "--override-temp-def-bg", "--override-temp-def-text");
+        renderEvening((sch.tutorings || []).filter((t) => Number(t.day) === d && !overriddenSourceIds.has(t.id) && overlapsEvening(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTutoringClick})), "is-tutoring", (t) => `${(sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`tut_${t.id}`]) ? `<span class="memo-badge">📌</span>` : ""}<div class="item-title">${escapeHtml(t.student)}</div><div class="item-sub">${escapeHtml(t.startTime)}</div><div class="item-sub">${escapeHtml(t.endTime)}</div>`, "--tutoring-def-bg", "--tutoring-def-text");
+        renderEvening(currentWeekWorks.filter((w) => Number(w.day) === d && !overriddenSourceIds.has(w.id) && overlapsEvening(w.startTime, w.endTime)).map(w => ({...w, clickFn: handleWorkClick})), "is-work", (w) => `<div class="item-title">${escapeHtml(w.name)}</div><div class="item-sub">${escapeHtml(w.startTime)}</div><div class="item-sub">${escapeHtml(w.endTime)}</div>`, "--work-def-bg", "--work-def-text");
+        renderEvening((sch.overrides || []).filter((o) => o.targetDate === currentCellDate && overlapsEvening(o.startTime, o.endTime)).map(o => ({...o, clickFn: handleOverrideClick})), "is-override-temp", (o) => `<div class="item-title">${escapeHtml(o.title)}</div>`, "--override-temp-def-bg", "--override-temp-def-text");
+        renderEvening(currentWeekTempEvents.filter((t) => Number(t.day) === d && t.slotType !== "noon" && overlapsEvening(t.startTime, t.endTime)).map(t => ({...t, clickFn: handleTempEventClick})), "is-override-temp", (t) => `<div class="item-title">${escapeHtml(t.title)}</div>`, "--override-temp-def-bg", "--override-temp-def-text");
 
         if (!hasContent) eveningCell.innerHTML = `<span class="evening-empty">無夜間行程</span>`;
         td.appendChild(eveningCell); eveningTr.appendChild(td);
@@ -871,27 +1145,37 @@ function saveSchoolCourse() {
   triggerHaptic(20); if (!currentEditingSlot) return; const sch = getActiveSchedule(), key = `${currentEditingSlot.day}_${currentEditingSlot.period}`;
   const name = document.getElementById("sch-name").value.trim(), color = document.getElementById("sch-color").value;
   let typeVal = document.getElementById("sch-type-select").value; if (typeVal === "custom") typeVal = document.getElementById("sch-type-custom").value.trim() || "必修";
+  
+  const memo = document.getElementById("sch-memo").value.trim();
+  const weeklyMemo = document.getElementById("sch-weekly-memo").value.trim();
+  const weekKey = getWeekKey(new Date());
 
   if (!sch.courses) sch.courses = {};
+  if (!sch.weeklyMemos) sch.weeklyMemos = {};
+  if (!sch.weeklyMemos[weekKey]) sch.weeklyMemos[weekKey] = {};
   
   const oldCourse = sch.courses[key];
   const oldName = oldCourse ? oldCourse.name : null;
 
-  if (!name) delete sch.courses[key];
-  else {
-    sch.courses[key] = { name, type: typeVal, room: document.getElementById("sch-room").value.trim(), teacher: document.getElementById("sch-teacher").value.trim(), memo: document.getElementById("sch-memo").value.trim(), color: color.toLowerCase() === getDefaultSchoolBgHex().toLowerCase() ? undefined : color, deadlines: JSON.parse(JSON.stringify(tempDeadlines)) };
+  if (!name) { 
+    delete sch.courses[key]; 
+    delete sch.weeklyMemos[weekKey][`school_${key}`];
+  } else {
+    sch.courses[key] = { name, type: typeVal, room: document.getElementById("sch-room").value.trim(), teacher: document.getElementById("sch-teacher").value.trim(), memo: memo, color: color.toLowerCase() === getDefaultSchoolBgHex().toLowerCase() ? undefined : color, deadlines: JSON.parse(JSON.stringify(tempDeadlines)) };
     
     Object.keys(sch.courses).forEach(k => {
       if (sch.courses[k].name === name || (oldName && sch.courses[k].name === oldName)) {
         sch.courses[k].name = name;
         sch.courses[k].deadlines = JSON.parse(JSON.stringify(tempDeadlines));
+        sch.courses[k].memo = memo; 
+        if (weeklyMemo) { 
+          sch.weeklyMemos[weekKey][`school_${k}`] = weeklyMemo;
+        } else {
+          delete sch.weeklyMemos[weekKey][`school_${k}`];
+        }
       }
     });
   }
-
-  const weekKey = getWeekKey(new Date()), memo = document.getElementById("sch-weekly-memo").value.trim();
-  if (!sch.weeklyMemos) sch.weeklyMemos = {}; if (!sch.weeklyMemos[weekKey]) sch.weeklyMemos[weekKey] = {};
-  if (memo) sch.weeklyMemos[weekKey][`school_${key}`] = memo; else delete sch.weeklyMemos[weekKey][`school_${key}`];
 
   saveToStorage(); renderSchedule(); closeModal("school-modal");
 }
@@ -1263,7 +1547,6 @@ function openRepayModal(id) {
   document.getElementById("repay-modal").classList.add("active"); 
 }
 
-// 修正 1：防止還款輸入負數或零
 function confirmRepay() {
   const id = document.getElementById("repay-id").value, date = document.getElementById("repay-date").value, amt = Number(document.getElementById("repay-amount").value);
   const item = state.finances.find(f => f.id === id); const rem = item.remaining !== undefined ? item.remaining : item.amount;
@@ -1433,7 +1716,6 @@ function confirmCatMove() {
 
 function openCatMergeModal(t, p, i) { activeCatTask = {t,p,i,s:getCategories()[t][p][i]}; const sel = document.getElementById("cat-merge-select"); sel.innerHTML = ""; getCategories()[t][p].filter((_,x)=>x!==i).forEach(x=>sel.appendChild(new Option(x,x))); document.getElementById("cat-merge-modal").classList.add("active"); }
 
-// 修正 2：確保合併類別時，同步更新「固定收支」的依賴狀態，防止孤兒類別
 function confirmCatMerge() { 
   const ts = document.getElementById("cat-merge-select").value, {t,p,i,s} = activeCatTask, c = getCategories(); 
   state.finances.forEach(f => {if(f.parentCat===p && f.subCat===s) f.subCat=ts;}); 
@@ -1450,9 +1732,6 @@ function escapeHtml(text) { return String(text||"").replace(/&/g, "&amp;").repla
 function escapeJS(text) { return String(text||"").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, "\\\""); }
 function escapeHtmlWithBr(text) { return escapeHtml(text).replace(/\n/g, "<br>"); }
 
-// ==========================================
-// UX 體驗改善：點擊背景關閉 Modal
-// ==========================================
 window.addEventListener('click', function(event) {
   if (event.target.classList.contains('modal')) {
     closeModal(event.target.id);

@@ -13,7 +13,6 @@
   <link rel="manifest" href="data:application/manifest+json;utf-8,%7B%22name%22%3A%22Phyllium%E7%9A%84%E5%9B%95%E6%AC%A1%E5%85%83%E5%8F%A3%E8%A2%8b%22%2C%22short_name%22%3A%22Phyllium%E7%9A%84%E5%9B%95%E6%AC%A1%E5%85%83%E5%8F%A3%E8%A2%8b%22%2C%22start_url%22%3A%22.%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f8fafc%22%2C%22theme_color%22%3A%22%232563eb%22%7D">
   <link rel="stylesheet" href="themes.css">
   <link rel="stylesheet" href="style.css">
-  <!-- 加入 defer 避免渲染阻塞白畫面 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
 </head>
 <body>
@@ -70,6 +69,10 @@
 
     <div class="control-bar">
       <button class="btn btn-secondary" id="btn-edit-mode-toggle" onclick="toggleEditMode()">唯讀模式</button>
+      
+      <!-- 24小時模式切換按鈕 -->
+      <button class="btn btn-secondary" id="btn-24h-mode-toggle" onclick="toggle24HourMode()">24小時模式</button>
+      
       <button class="btn btn-secondary" onclick="openScheduleConfigModal()">當前課表設定</button>
       <button class="btn btn-secondary" onclick="openPeriodConfigModal()">節次設定</button>
       <button class="btn btn-secondary" onclick="toggleLatePeriods()"><span id="late-period-text">顯示 9-10 節</span></button>
