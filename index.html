@@ -80,27 +80,39 @@
 
     <div class="schedule-footer-banner" id="schedule-footer-banner" onclick="openScheduleSelectModal()" title="點擊切換或新增課表">載入中...</div>
 
-    <div class="control-bar" id="main-control-bar">
-      <button class="btn btn-secondary" id="btn-edit-mode-toggle" onclick="toggleEditMode()">唯讀模式</button>
-      <button class="btn btn-secondary" id="btn-24h-mode-toggle" onclick="toggle24HourMode()">24小時模式</button>
-      <button class="btn btn-secondary" onclick="openScheduleConfigModal()">當前課表設定</button>
-      <button class="btn btn-secondary" onclick="openPeriodConfigModal()">節次設定</button>
-      <button class="btn btn-secondary" onclick="toggleLatePeriods()"><span id="late-period-text">顯示 9-10 節</span></button>
-      <button class="btn btn-warning" onclick="openOverrideModal()">臨時調課</button>
-      <button class="btn btn-warning" onclick="openTempEventModal()">+ 臨時事件</button>
-      <button class="btn" onclick="openTutoringModal()">+ 家教</button>
-      <button class="btn" style="background:#0d9488;" onclick="openWorkModal()">+ 工作</button>
+    <div class="control-bar" id="main-control-bar" style="gap: 8px;">
+      <!-- 第一組：模式切換 -->
+      <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+        <button class="btn btn-secondary" id="btn-edit-mode-toggle" onclick="toggleEditMode()">唯讀模式</button>
+        <button class="btn btn-secondary" id="btn-24h-mode-toggle" onclick="toggle24HourMode()">24小時模式</button>
+      </div>
       
-      <div class="control-bar-footer">
-        <div style="display:inline-flex; align-items:center; gap:6px;">
-          <span style="font-size:0.8rem; font-weight:600;">對齊：</span>
+      <!-- 第二組：課表與節次 -->
+      <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+        <button class="btn btn-secondary" onclick="openScheduleConfigModal()">當前課表設定</button>
+        <button class="btn btn-secondary" onclick="openPeriodConfigModal()">節次設定</button>
+        <button class="btn btn-secondary" onclick="toggleLatePeriods()"><span id="late-period-text">顯示 9-10 節</span></button>
+      </div>
+      
+      <!-- 第三組：新增功能 -->
+      <div style="display: flex; gap: 5px; flex-wrap: wrap;">
+        <button class="btn btn-warning" onclick="openOverrideModal()">臨時調課</button>
+        <button class="btn btn-warning" onclick="openTempEventModal()">+ 臨時事件</button>
+        <button class="btn" onclick="openTutoringModal()">+ 家教</button>
+        <button class="btn" style="background:#0d9488;" onclick="openWorkModal()">+ 工作</button>
+      </div>
+      
+      <!-- 第四組：對齊與清除自訂顏色 (強制佔滿整行並加上分隔線) -->
+      <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--border);">
+        <div style="display:inline-flex; align-items:center; gap:4px;">
+          <span style="font-size:0.75rem; font-weight:600;">對齊：</span>
           <select id="text-align-select" class="theme-select" onchange="onTextAlignChange(this.value)">
             <option value="center">置中對齊</option>
             <option value="left">靠左對齊</option>
             <option value="right">靠右對齊</option>
           </select>
         </div>
-        <button class="btn btn-danger" style="font-size:0.75rem; padding: 6px 12px; width: auto;" onclick="clearAllCustomColors()">清除自訂顏色</button>
+        <button class="btn btn-danger" style="font-size:0.70rem;" onclick="clearAllCustomColors()">清除自訂顏色</button>
       </div>
     </div>
   </main>
@@ -186,14 +198,17 @@
 
   <!-- 好友連線分頁 -->
   <section id="friends-view" class="friends-panel">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+    <!-- 標題與右側按鈕區塊 -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">
       <h3 style="margin:0;">🤝 好友與連線系統</h3>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:6px;">
         <button class="btn btn-secondary" onclick="openNicknameModal()">更改暱稱</button>
         <button class="btn btn-warning" id="btn-privacy-mask" onclick="openPrivacyMaskModal()">設定隱私遮罩</button>
       </div>
     </div>
-    <div class="form-row" style="margin-bottom:12px; display:flex; flex-wrap:nowrap; gap:8px;">
+    
+    <!-- 搜尋框區塊 (設定 min-width: 0 防止輸入框把按鈕擠壓變形) -->
+    <div class="form-row" style="margin-bottom:12px; display:flex; flex-wrap:nowrap; gap:6px;">
       <input type="text" id="friend-search-input" placeholder="輸入 Email 或暱稱搜尋好友..." style="flex:1; min-width:0;">
       <button class="btn" style="flex-shrink:0;" onclick="searchFriends()">搜尋</button>
     </div>
@@ -266,7 +281,7 @@
     </div>
   </div>
 
-  <!-- 課表隱私遮罩 (由原本 injectNewUI 移入) -->
+  <!-- 課表隱私遮罩 -->
   <div class="modal" id="privacy-mask-modal">
     <div class="modal-content">
       <div class="modal-header">設定當前課表隱私遮罩</div>
@@ -462,7 +477,7 @@
     </div>
   </div>
   
-  <!-- 便利貼 modal (由原本 injectNewUI 移入) -->
+  <!-- 便利貼 modal -->
   <div class="modal" id="leave-note-modal">
     <div class="modal-content">
       <div class="modal-header">留言便利貼給好友</div>

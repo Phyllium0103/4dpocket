@@ -112,45 +112,22 @@ h1 {
 
 .control-bar { 
   display: flex; 
-  gap: 8px; 
-  margin-top: 12px; 
-  margin-bottom: 12px; 
+  gap: 5px; 
+  margin-top: 8px; 
+  margin-bottom: 8px; 
   flex-wrap: wrap; 
   align-items: center; 
 }
 
-#main-control-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
-  gap: 8px;
-}
-#main-control-bar .btn {
-  width: 100%;
-  padding: 8px 4px;
-  font-size: 0.75rem;
-}
-
-.control-bar-footer {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 6px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--border);
-}
-
 /* ================== Buttons ================== */
 .btn { 
-  padding: 8px 12px; 
+  padding: 5px 9px; 
   background: var(--primary); 
   color: #ffffff; 
   border: none; 
-  border-radius: 8px; 
+  border-radius: 6px; 
   cursor: pointer; 
-  font-size: 0.8rem; 
+  font-size: 0.75rem; 
   font-weight: 600; 
   display: inline-flex; 
   align-items: center; 
@@ -621,7 +598,7 @@ th.today-header {
 .common-empty { background-color: rgba(34, 197, 94, 0.25) !important; border: 2px dashed #22c55e !important; box-shadow: inset 0 0 5px rgba(34, 197, 94, 0.5); }
 .viewing-friend-banner { background: #f59e0b; color: white; font-weight: bold; text-align: center; padding: 6px; border-radius: 8px; margin-bottom: 8px; font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; }
 
-/* ================== Error Toast Notification ================== */
+/* ================== Error Toast Notification (新增) ================== */
 .toast {
   position: fixed;
   bottom: 80px;
