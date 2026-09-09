@@ -587,11 +587,31 @@ function openViewDetailModal(type, payload) {
   } else if (type === "tutoring") {
     const { tut } = payload; titleEl.innerText = `家教: ${tut.student}`;
     const weeklyMemo = (sch.weeklyMemos[weekKey] && sch.weeklyMemos[weekKey][`tut_${tut.id}`]) || "";
-    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">時間</div><div class="detail-value">${dayNames[tut.day]} ${tut.startTime} ~ ${tut.endTime}</div>${tut.subject ? `<div class="detail-label">科目</div><div class="detail-value">${escapeHtml(tut.subject)}</div>` : ""}${tut.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(tut.location)}</div>` : ""}${tut.memo ? `<div class="detail-label">備忘錄</div><div class="detail-value">${escapeHtmlWithBr(tut.memo)}</div>` : ""}${weeklyMemo ? `<div class="detail-label">每周備忘錄</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${escapeHtmlWithBr(weeklyMemo)}</div>` : ""}</div>`;
+    
+    // 補齊了聯絡方式 (Line, FB, Phone) 以及 收費時薪，並加入條件判斷
+    bodyEl.innerHTML = `<div class="detail-card">
+      <div class="detail-label">時間</div><div class="detail-value">${dayNames[tut.day]} ${tut.startTime} ~ ${tut.endTime}</div>
+      ${tut.subject ? `<div class="detail-label">科目</div><div class="detail-value">${escapeHtml(tut.subject)}</div>` : ""}
+      ${tut.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(tut.location)}</div>` : ""}
+      ${tut.line ? `<div class="detail-label">Line ID</div><div class="detail-value">${escapeHtml(tut.line)}</div>` : ""}
+      ${tut.fb ? `<div class="detail-label">Facebook</div><div class="detail-value">${escapeHtml(tut.fb)}</div>` : ""}
+      ${tut.phone ? `<div class="detail-label">電話</div><div class="detail-value">${escapeHtml(tut.phone)}</div>` : ""}
+      ${tut.rate ? `<div class="detail-label">收費時薪</div><div class="detail-value">$${escapeHtml(tut.rate)} / hr</div>` : ""}
+      ${tut.memo ? `<div class="detail-label">備忘錄</div><div class="detail-value">${escapeHtmlWithBr(tut.memo)}</div>` : ""}
+      ${weeklyMemo ? `<div class="detail-label">每周備忘錄</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${escapeHtmlWithBr(weeklyMemo)}</div>` : ""}
+    </div>`;
     switchBtn.onclick = () => { closeModal("view-detail-modal"); openTutoringModal(tut.id); };
   } else if (type === "work") {
     const { work } = payload; titleEl.innerText = `工作: ${work.name}`;
-    bodyEl.innerHTML = `<div class="detail-card"><div class="detail-label">類型</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${work.type === "weekly" ? "每週工作" : "固定工作"}</div><div class="detail-label">時間</div><div class="detail-value">${dayNames[work.day]} ${work.startTime} ~ ${work.endTime}</div>${work.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(work.location)}</div>` : ""}${work.memo ? `<div class="detail-label">備忘</div><div class="detail-value">${escapeHtmlWithBr(work.memo)}</div>` : ""}</div>`;
+    
+    // 補齊了工作時薪，並加入條件判斷
+    bodyEl.innerHTML = `<div class="detail-card">
+      <div class="detail-label">類型</div><div class="detail-value" style="color:var(--primary); font-weight:700;">${work.type === "weekly" ? "每週工作" : "固定工作"}</div>
+      <div class="detail-label">時間</div><div class="detail-value">${dayNames[work.day]} ${work.startTime} ~ ${work.endTime}</div>
+      ${work.location ? `<div class="detail-label">地點</div><div class="detail-value">${escapeHtml(work.location)}</div>` : ""}
+      ${work.rate ? `<div class="detail-label">工作時薪</div><div class="detail-value">$${escapeHtml(work.rate)} / hr</div>` : ""}
+      ${work.memo ? `<div class="detail-label">備忘</div><div class="detail-value">${escapeHtmlWithBr(work.memo)}</div>` : ""}
+    </div>`;
     switchBtn.onclick = () => { closeModal("view-detail-modal"); openWorkModal(work.id); };
   } else if (type === "override") {
     const { ovr } = payload; currentViewingOverrideId = ovr.id; titleEl.innerText = `調課: ${ovr.title}`;
