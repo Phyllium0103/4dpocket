@@ -1487,6 +1487,8 @@ function init() {
     renderBillings(); 
     renderFinances(); 
     checkAuthSession();
+
+    switchView('schedule');
 }
 
 function getMondayOfWeek(d, offsetWeeks = 0) { 
