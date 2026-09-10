@@ -7,17 +7,19 @@
   "theme_color": "#2563eb",
   "icons": [
     {
-      "src": "UniPocket_png192.png",
+      "src": "./UniPocket_png192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "UniPocket_png512.png",
+      "src": "./UniPocket_png512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "icon.svg",
+      "src": "./icon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
     }
