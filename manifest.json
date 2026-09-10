@@ -3,7 +3,7 @@
   "short_name": "UniPocket",
   "start_url": ".",
   "display": "standalone",
-  "background_color": "#f8fafc",
+  "background_color": "#0f172a",
   "theme_color": "#2563eb",
   "icons": [
     {
