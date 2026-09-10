@@ -1065,6 +1065,9 @@ async function deleteMessage(msgId) {
 // ========================================================
 // 檢視好友課表與隱私遮罩
 // ========================================================
+// ========================================================
+// 檢視好友課表與隱私遮罩
+// ========================================================
 async function viewFriendSchedule(fId, fName) {
     try {
         const { data } = await supabaseClient.from("user_schedules").select("data").eq("user_id", fId).single();
@@ -1080,9 +1083,10 @@ async function viewFriendSchedule(fId, fName) {
             document.getElementById("friend-view-title").innerText = `👀 正在查看 ${fName} 的課表`;
             document.getElementById("friend-view-banner").style.display = "flex";
             
-            const cbar = document.querySelector(".control-bar");
+            const cbar = document.getElementById("main-control-bar");
             if (cbar) {
-                Array.from(cbar.children).forEach(btn => {
+                // 【修正】改為 querySelectorAll(".btn")，精準選取按鈕，避免連同分組 div 一起隱藏
+                Array.from(cbar.querySelectorAll(".btn")).forEach(btn => {
                     const txt = btn.innerText || "";
                     const hiddenKeywords = ["唯讀模式", "編輯中", "當前課表設定", "節次設定", "臨時調課", "+ 臨時事件", "+ 家教", "+ 工作", "清除自訂顏色"];
                     if (hiddenKeywords.some(t => txt.includes(t))) {
@@ -1109,13 +1113,12 @@ function exitFriendView() {
     showIntersection = false; 
     document.getElementById("friend-view-banner").style.display = "none"; 
     
-    const cbar = document.querySelector(".control-bar");
+    const cbar = document.getElementById("main-control-bar");
     if (cbar) { 
-        Array.from(cbar.children).forEach(btn => { 
-            if (btn.classList.contains("friend-hidden")) { 
-                btn.style.display = ""; 
-                btn.classList.remove("friend-hidden"); 
-            } 
+        // 【修正】精準解除按鈕的隱藏狀態
+        Array.from(cbar.querySelectorAll(".friend-hidden")).forEach(btn => { 
+            btn.style.display = ""; 
+            btn.classList.remove("friend-hidden"); 
         }); 
     }
     renderSchedule(); 
