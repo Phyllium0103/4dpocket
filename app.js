@@ -1492,6 +1492,16 @@ function init() {
     checkAuthSession();
 
     switchView('schedule');
+    // 確保開場動畫播放完畢後平滑隱藏
+    setTimeout(() => {
+        const splashScreen = document.getElementById('splash-screen');
+        if (splashScreen) {
+            splashScreen.classList.add('hidden');
+            setTimeout(() => {
+                splashScreen.remove();
+            }, 500);
+        }
+    }, 2500);
 }
 
 function getMondayOfWeek(d, offsetWeeks = 0) { 
