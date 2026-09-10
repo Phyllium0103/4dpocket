@@ -1493,14 +1493,27 @@ function init() {
 
     switchView('schedule');
     // 確保開場動畫播放完畢後平滑隱藏
-    setTimeout(() => {
+// 定義一個用來立刻跳過/隱藏開場動畫的函數
+    const dismissSplash = () => {
         const splashScreen = document.getElementById('splash-screen');
-        if (splashScreen) {
+        if (splashScreen && !splashScreen.classList.contains('hidden')) {
             splashScreen.classList.add('hidden');
             setTimeout(() => {
                 splashScreen.remove();
             }, 500);
         }
+    };
+
+    // 監聽整個畫面的點擊或觸控事件，點擊即可立刻跳過動畫
+    const splashScreen = document.getElementById('splash-screen');
+    if (splashScreen) {
+        splashScreen.addEventListener('click', dismissSplash);
+        splashScreen.addEventListener('touchstart', dismissSplash);
+    }
+
+    // 原本的 1.5 秒自動結束計時器維持不變
+    setTimeout(() => {
+        dismissSplash();
     }, 2500);
 }
 
