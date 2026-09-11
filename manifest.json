@@ -1,17 +1,10 @@
 {
-  "id": "/unipocket",
   "name": "UniPocket",
   "short_name": "UniPocket",
-  "description": "胖虎說：「你的空堂就是我的空堂！」立刻下載 UniPocket 加我好友，讓我用這款 App 霸佔你所有沒排課的時間！",
   "start_url": ".",
-  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#0284c7",
+  "background_color": "#0f172a",
   "theme_color": "#2563eb",
-  "lang": "zh-TW",
-  "dir": "ltr",
-  "categories": ["productivity", "education", "finance"],
   "icons": [
     {
       "src": "./UniPocket_png192.png",
@@ -29,14 +22,6 @@
       "src": "./icon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "./screenshot1.png",
-      "sizes": "1080x1920",
-      "type": "image/png",
-      "form_factor": "narrow"
     }
   ]
 }

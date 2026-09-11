@@ -51,10 +51,6 @@ window.addEventListener('beforeunload', (e) => {
     if (isSaving) {
         e.preventDefault();
         e.returnValue = '資料正在儲存中，確定要離開嗎？';
-    } else {
-        // 當沒有在儲存時的自訂提示
-        e.preventDefault();
-        e.returnValue = 'UniPocket 祝你 ALL PASS！';
     }
 });
 
@@ -486,9 +482,6 @@ async function saveToStorage() {
     }
     
     try {
-        // 👇 新增這行：記錄本地資料最後更新的精確時間
-        state.localUpdatedAt = Date.now(); 
-        
         localStorage.setItem("local_schedule_v2_data", JSON.stringify(state));
         updatePresetDropdowns();
         if (currentUser) {
@@ -521,31 +514,17 @@ async function pushCloudData() {
 async function pullCloudData() {
     if (!supabaseClient || !currentUser) return;
     try {
-        // 👇 取得資料時，順便把雲端的 updated_at 時間抓下來
-        const { data } = await supabaseClient.from("user_schedules").select("data, updated_at").eq("user_id", currentUser.id).single();
-        
+        const { data } = await supabaseClient.from("user_schedules").select("data").eq("user_id", currentUser.id).single();
         if (data && data.data) {
-            // 👇 判斷時間：比較雲端時間與本地時間
-            const cloudTime = new Date(data.updated_at).getTime();
-            const localTime = state.localUpdatedAt || 0;
-
-            if (localTime > cloudTime) {
-                // 🛡️ 情況 A：本地資料比較新 (代表你剛才經歷過離線編輯)
-                console.log("發現未同步的離線資料，正在推上雲端...");
-                await pushCloudData(); 
-                showToast("已將離線期間的修改同步至雲端！");
-            } else {
-                // ☁️ 情況 B：雲端資料比較新，正常覆蓋本地
-                state = { ...createDefaultState(), ...data.data };
-                state.recurringFinances = state.recurringFinances || [];
-                localStorage.setItem("local_schedule_v2_data", JSON.stringify(state));
-                applyTheme();
-                updatePresetDropdowns();
-                checkRecurringFinances();
-                renderSchedule();
-                renderBillings();
-                renderFinances();
-            }
+            state = { ...createDefaultState(), ...data.data };
+            state.recurringFinances = state.recurringFinances || [];
+            localStorage.setItem("local_schedule_v2_data", JSON.stringify(state));
+            applyTheme();
+            updatePresetDropdowns();
+            checkRecurringFinances();
+            renderSchedule();
+            renderBillings();
+            renderFinances();
         } else {
             await pushCloudData();
         }
@@ -1393,15 +1372,6 @@ function applyTheme() {
     document.documentElement.setAttribute("data-theme-style", state.themeStyle); 
     const btn = document.getElementById("theme-toggle-btn"); 
     if (btn) btn.innerText = state.themeMode === "dark" ? "淺色" : "深色"; 
-
-    // --- 新增這段：動態抓取當前主題的背景色，並更新 meta 標籤 ---
-    const currentBgColor = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-    if (metaThemeColor && currentBgColor) {
-        metaThemeColor.setAttribute("content", currentBgColor);
-    }
-    // --------------------------------------------------------
-
     initThemeDropdown(); 
     renderSchedule(); 
     saveToStorage(); 
@@ -4473,29 +4443,6 @@ window.addEventListener('click', function(event) {
     if (event.target.classList.contains('modal')) { 
         closeModal(event.target.id); 
     } 
-});
-
-// 監聽網路恢復連線事件
-window.addEventListener('online', () => {
-    if (currentUser) {
-        const text = document.getElementById("sync-user-text");
-        if (text) text.innerText = "網路恢復，同步中...";
-        
-        // 網路一恢復，立刻將本地最新狀態推上雲端
-        pushCloudData().then(success => {
-            if(success) {
-                showToast("網路已恢復，離線資料已成功同步！", "success");
-                if (text) text.innerText = `已同步`;
-            }
-        });
-    }
-});
-
-// 監聽網路斷線事件 (給使用者視覺回饋)
-window.addEventListener('offline', () => {
-    showToast("目前處於離線狀態，資料將暫存於手機中", "error");
-    const text = document.getElementById("sync-user-text");
-    if (text) text.innerText = "離線模式 (已暫存)";
 });
 
 // 程式進入點

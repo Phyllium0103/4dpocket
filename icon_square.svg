@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 哆啦A夢藍背景 -->
+  <rect width="512" height="512" rx="115" fill="#0284c7"/>
+
+  <!-- 整體群組往下移 -->
+  <g transform="translate(0, 35)">
+    <!-- ================= 1. 垂吊的掛繩 (極簡懸掛感) ================= -->
+    <!-- 白色掛繩，頂點稍微往上提，線條交界處使用圓角 -->
+    <path d="M 176 180 L 256 90 L 336 180" fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- ================= 2. 行事曆紅色裝訂條 (項圈) ================= -->
+    <!-- 紅色主體 -->
+    <rect x="136" y="180" width="240" height="40" rx="10" fill="#ef4444"/>
+    <!-- 裝訂條底部的暗紅色陰影 (增加立體厚度) -->
+    <rect x="136" y="214" width="240" height="6" fill="#dc2626" rx="3"/>
+
+    <!-- ================= 3. 厚厚的日曆紙 (四次元口袋) ================= -->
+    <!-- 底層日曆紙 (疊影) -->
+    <path d="M 136 220 A 120 120 0 0 0 376 220 Z" fill="#7dd3fc" transform="translate(0, 16)"/>
+    <!-- 中層日曆紙 (疊影) -->
+    <path d="M 136 220 A 120 120 0 0 0 376 220 Z" fill="#bae6fd" transform="translate(0, 8)"/>
+    <!-- 表面純白日曆紙 / 口袋 -->
+    <path d="M 136 220 A 120 120 0 0 0 376 220 Z" fill="#ffffff"/>
+
+    <!-- ================= 4. 金屬裝訂線圈 ================= -->
+    <!-- 四個銀白色的活頁圈圈 -->
+    <rect x="166" y="210" width="10" height="24" rx="5" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="206" y="210" width="10" height="24" rx="5" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="296" y="210" width="10" height="24" rx="5" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+    <rect x="336" y="210" width="10" height="24" rx="5" fill="#f8fafc" stroke="#cbd5e1" stroke-width="2"/>
+
+    <!-- ================= 5. 適中大小的鈴鐺 (完美比例) ================= -->
+    <!-- 外框與黃色主體 -->
+    <circle cx="256" cy="232" r="20" fill="#facc15" stroke="#ca8a04" stroke-width="3.5"/>
+    <!-- 鈴鐺的兩道立體橫線 -->
+    <path d="M 238 224 Q 256 228 274 224" fill="none" stroke="#ca8a04" stroke-width="3" stroke-linecap="round"/>
+    <path d="M 237 230 Q 256 234 275 230" fill="none" stroke="#ca8a04" stroke-width="3" stroke-linecap="round"/>
+    <!-- 鈴鐺的下半部圓孔與直線 -->
+    <circle cx="256" cy="239" r="3.5" fill="#ca8a04"/>
+    <line x1="256" y1="239" x2="256" y2="252" stroke="#ca8a04" stroke-width="3.5" stroke-linecap="round"/>
+    <!-- 點綴高光 -->
+    <circle cx="246" cy="220" r="4" fill="#fef08a" opacity="0.9"/>
+  </g>
+</svg>
