@@ -12,7 +12,6 @@ const urlsToCache = [
   './icon.svg',
   './UniPocket_png192.png',
   'https://uni-pocket.pages.dev/UniPocket_png512.png',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2' // 快取 Supabase SDK
 ];
 
 // 1. 安裝階段：將指定的檔案寫入快取
